@@ -69,10 +69,15 @@ impl SingleInstance {
         // SAFETY: name is NUL-terminated; the handle is closed on drop or below.
         unsafe {
             let handle = CreateMutexW(std::ptr::null(), 0, name.as_ptr());
-            ensure!(!handle.is_null(), "Cannot check for another running SpeakCraft");
+            ensure!(
+                !handle.is_null(),
+                "Cannot check for another running SpeakCraft"
+            );
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 CloseHandle(handle);
-                bail!("SpeakCraft is already running. Use the open SpeakCraft window or close it first.");
+                bail!(
+                    "SpeakCraft is already running. Use the open SpeakCraft window or close it first."
+                );
             }
             Ok(Self(handle))
         }

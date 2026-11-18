@@ -396,7 +396,8 @@ fn downsampling_averages_to_16_khz_and_keeps_lower_rates() {
 
 #[test]
 fn settings_round_trip_through_a_saved_file_and_old_files_still_load() {
-    let directory = std::env::temp_dir().join(format!("speakcraft-settings-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("speakcraft-settings-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("config.toml");
     let config = Config {

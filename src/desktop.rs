@@ -423,8 +423,9 @@ mod tests {
             &mut harness,
             "Dictation disabled. No new audio will be recorded or inserted.",
         );
-        harness
-            .get_by_label_contains("Set the SPEAKCRAFT_TEST_MISSING_CREDENTIAL environment variable");
+        harness.get_by_label_contains(
+            "Set the SPEAKCRAFT_TEST_MISSING_CREDENTIAL environment variable",
+        );
         wait_for(&mut harness, "Enable dictation");
 
         harness
