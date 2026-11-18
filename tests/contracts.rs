@@ -335,6 +335,32 @@ fn transient_failures_are_retried_once_and_client_errors_are_not() {
 }
 
 #[test]
+fn a_refused_connection_is_retried_once_for_a_realistic_upload() {
+    let closed = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let config = Config {
+        base_url: format!("http://{}/v1", closed.local_addr().unwrap()),
+        api_key_env: String::new(),
+        ..Config::default()
+    };
+    drop(closed);
+    // About five seconds of 16 kHz speech; uploads this large once hid the
+    // refused connection behind a body error, so it was never retried.
+    let started = Instant::now();
+    let error = Pipeline::new(config)
+        .unwrap()
+        .transcribe(vec![1; 160_000], "voice.wav")
+        .err()
+        .expect("nothing listens on the port");
+    let connect = error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<reqwest::Error>())
+        .any(reqwest::Error::is_connect);
+    assert!(connect, "{error:#}");
+    // The retry waits a second before its second attempt.
+    assert!(started.elapsed() >= Duration::from_secs(1));
+}
+
+#[test]
 fn cancellation_stops_retries_and_cleanup_after_the_request_in_flight() {
     for (status, body) in [(503, "busy"), (200, r#"{"text":"Raw transcript."}"#)] {
         let server = Server::http("127.0.0.1:0").unwrap();

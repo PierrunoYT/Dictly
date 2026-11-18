@@ -1,6 +1,6 @@
 use crate::{audio::MAX_AUDIO_BYTES, config::Config};
 use anyhow::{Context, Result, ensure};
-use reqwest::blocking::{Client, RequestBuilder, Response, multipart};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use serde::Deserialize;
 use serde_json::json;
 use std::{
@@ -100,21 +100,59 @@ impl Pipeline {
         }
     }
 
-    fn form(&self, audio: &[u8], filename: &str) -> Result<multipart::Form> {
-        let file = multipart::Part::bytes(audio.to_vec())
-            .file_name(filename.to_owned())
-            .mime_str("application/octet-stream")?;
-        let mut form = multipart::Form::new()
-            .part("file", file)
-            .text("model", self.config.transcription_model.clone())
-            .text("response_format", "json");
+    /// Build the multipart upload in memory. reqwest's blocking client streams a
+    /// `multipart::Form` through a pump, so a refused connection surfaces as a
+    /// body error instead of a connect error and would not be retried.
+    fn form(&self, audio: &[u8], filename: &str) -> (String, Vec<u8>) {
+        let mut fields = vec![
+            ("model", self.config.transcription_model.clone()),
+            ("response_format", "json".to_owned()),
+        ];
         if let Some(language) = &self.config.language {
-            form = form.text("language", language.clone());
+            fields.push(("language", language.clone()));
         }
         if !self.config.dictionary.is_empty() {
-            form = form.text("prompt", self.config.dictionary.join(", "));
+            fields.push(("prompt", self.config.dictionary.join(", ")));
         }
-        Ok(form)
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos() as u64);
+        let boundary = (0u64..)
+            .map(|attempt| format!("speakcraft-{:016x}", seed.wrapping_add(attempt)))
+            .find(|boundary| {
+                let bytes = boundary.as_bytes();
+                !audio.windows(bytes.len()).any(|window| window == bytes)
+                    && fields.iter().all(|(_, value)| !value.contains(boundary))
+            })
+            .expect("an unused boundary exists");
+        // Quotes and line breaks would end the Content-Disposition parameter.
+        let filename: String = filename
+            .chars()
+            .filter(|c| !c.is_control())
+            .map(|c| match c {
+                '"' => "%22".to_owned(),
+                '\\' => "%5C".to_owned(),
+                c => c.to_string(),
+            })
+            .collect();
+        let mut body = Vec::with_capacity(audio.len() + 1024);
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(audio);
+        for (name, value) in &fields {
+            body.extend_from_slice(
+                format!(
+                    "\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}"
+                )
+                .as_bytes(),
+            );
+        }
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        (format!("multipart/form-data; boundary={boundary}"), body)
     }
 
     pub fn transcribe(&self, audio: Vec<u8>, filename: &str) -> Result<Transcript> {
@@ -134,12 +172,15 @@ impl Pipeline {
             !audio.is_empty() && audio.len() <= MAX_AUDIO_BYTES,
             "Audio must contain between 1 byte and 24 MB"
         );
+        let (content_type, body) = self.form(&audio, filename);
+        drop(audio);
         let mut retried = false;
         let response = loop {
             ensure!(!canceled.load(Ordering::Acquire), "Canceled");
             let result = self
                 .request("audio/transcriptions")
-                .multipart(self.form(&audio, filename)?)
+                .header(reqwest::header::CONTENT_TYPE, &content_type)
+                .body(body.clone())
                 .send();
             let delay = match &result {
                 Ok(response)
