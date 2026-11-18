@@ -37,11 +37,14 @@ fn load_from(target: &str) -> Result<Option<String>> {
             }
             bail!("Cannot read the saved API key from Windows Credential Manager");
         }
-        let blob = std::slice::from_raw_parts(
-            (*credential).CredentialBlob,
-            (*credential).CredentialBlobSize as usize,
-        )
-        .to_vec();
+        let entry = &*credential;
+        // An empty secret has a null blob, which from_raw_parts must never receive.
+        let blob = if entry.CredentialBlob.is_null() || entry.CredentialBlobSize == 0 {
+            Vec::new()
+        } else {
+            std::slice::from_raw_parts(entry.CredentialBlob, entry.CredentialBlobSize as usize)
+                .to_vec()
+        };
         CredFree(credential.cast());
         match String::from_utf8(blob) {
             Ok(key) if !key.trim().is_empty() => Ok(Some(key)),
@@ -105,5 +108,26 @@ mod tests {
         assert!(load_from(&target).unwrap().is_none());
         delete_from(&target).unwrap();
         assert!(save_to(&target, " ").is_err());
+    }
+
+    #[test]
+    fn an_empty_saved_credential_is_reported_as_unreadable() {
+        let target = format!("SpeakCraft/test empty credential {}", std::process::id());
+        let mut name = wide(&target);
+        let mut user = wide("SpeakCraft");
+        // SAFETY: every pointer outlives the call; a null blob of size 0 is how
+        // Credential Manager stores an emptied password.
+        let saved = unsafe {
+            let mut credential: CREDENTIALW = std::mem::zeroed();
+            credential.Type = CRED_TYPE_GENERIC;
+            credential.TargetName = name.as_mut_ptr();
+            credential.UserName = user.as_mut_ptr();
+            credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
+            CredWriteW(&credential, 0)
+        };
+        assert_ne!(saved, 0);
+        let loaded = load_from(&target);
+        delete_from(&target).unwrap();
+        assert!(loaded.is_err());
     }
 }
