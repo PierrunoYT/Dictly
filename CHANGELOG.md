@@ -41,6 +41,7 @@ User-visible changes to SpeakCraft. Versions match `Cargo.toml`. Local build ent
 ### Fixed
 
 - Typed insertion into Windows 11 Notepad arrived as one character repeated, such as `plain ssss…`, because Notepad reads the most recent injected character when it processes each keystroke. SpeakCraft now types one character at a time, about 100 per second, and stops cleanly if focus changes or Esc is pressed mid-insertion.
+- Updated `rustls-webpki` to 0.103.17 and `webpki-roots` to 1.0.12 for TLS certificate-verification advisories RUSTSEC-2026-0382 and RUSTSEC-2026-0381, and replaced the yanked `clipboard-win` 5.4.1 with 5.4.3.
 
 On 2026-10-16, 12 contract tests and 2 Windows unit tests passed, along with strict Clippy with and without `test-audio`. The end-to-end harness passed 13 scenarios against the release executable: hold-to-talk, tap-to-toggle, both cancel paths, a provider error, focus change with recovery, held modifiers, second instance, Notepad typing, Notepad pasting, clipboard restore, the recording limit, and one live OpenAI dictation with cleanup. Recorded TTS audio replaced the microphone because the test machine had no connected input device, so live microphone capture remains unverified.
 
