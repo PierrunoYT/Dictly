@@ -71,15 +71,20 @@ impl Pipeline {
             config.api_key_env.is_empty() || key.is_some(),
             "An API key is required for this provider"
         );
+        let mut client = Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(90))
+            // Do not send recordings to a redirected endpoint.
+            .redirect(reqwest::redirect::Policy::none());
+        // Plain HTTP is allowed only because it never leaves this machine, so an
+        // HTTP_PROXY/ALL_PROXY from the environment must not carry it elsewhere.
+        if reqwest::Url::parse(&config.base_url).is_ok_and(|url| url.scheme() == "http") {
+            client = client.no_proxy();
+        }
         Ok(Self {
             config,
             key,
-            client: Client::builder()
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(90))
-                // Do not send recordings to a redirected endpoint.
-                .redirect(reqwest::redirect::Policy::none())
-                .build()?,
+            client: client.build()?,
         })
     }
 
