@@ -151,6 +151,14 @@ impl Desktop {
 
     fn start(&mut self, ctx: &egui::Context) {
         let mut config = self.config.clone();
+        // Pasted values often carry a trailing space or newline.
+        for field in [
+            &mut config.base_url,
+            &mut config.transcription_model,
+            &mut config.cleanup_model,
+        ] {
+            *field = field.trim().to_owned();
+        }
         config.language = if self.language.trim().is_empty() {
             None
         } else {
@@ -485,6 +493,17 @@ mod tests {
         harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
         harness.key_press(egui::Key::Backspace);
         harness.run();
+        // A pasted provider URL with a trailing space still enables.
+        harness
+            .get_by_role_and_label(Role::TextInput, "Provider URL")
+            .click();
+        harness.run();
+        harness.key_press(egui::Key::End);
+        harness
+            .get_by_role_and_label(Role::TextInput, "Provider URL")
+            .type_text(" ");
+        harness.run();
+        assert!(harness.state().config.base_url.ends_with(' '));
 
         harness
             .get_by_role_and_label(Role::PasswordInput, "API key")

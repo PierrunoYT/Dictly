@@ -80,6 +80,12 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
+        // The URL parser ignores surrounding spaces, but requests would keep
+        // them inside the path (for example /v1%20/audio/transcriptions).
+        ensure!(
+            self.base_url.trim() == self.base_url,
+            "base_url must not start or end with spaces"
+        );
         let url = reqwest::Url::parse(&self.base_url).context("Invalid base_url")?;
         let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
         ensure!(

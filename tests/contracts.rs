@@ -161,6 +161,9 @@ fn configuration_rejects_insecure_endpoints_typos_and_invalid_limits() {
         "https://name:password@example.com/v1",
         "https://example.com/v1?key=test",
         "ftp://127.0.0.1",
+        // Requests would go to /v1%20/audio/transcriptions.
+        "https://example.com/v1 ",
+        " https://example.com/v1",
     ] {
         assert!(
             Config {

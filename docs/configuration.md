@@ -21,7 +21,7 @@ Existing configuration files from before the SpeakCraft rename still work. Keep 
 
 | Field | Type | Default | Contract |
 | --- | --- | --- | --- |
-| `base_url` | String | `"https://api.openai.com/v1"` | API prefix, not the full transcription endpoint. HTTPS required except HTTP on `localhost`, `127.0.0.1`, or `[::1]`. No embedded credentials, query, or fragment. |
+| `base_url` | String | `"https://api.openai.com/v1"` | API prefix, not the full transcription endpoint. HTTPS required except HTTP on `localhost`, `127.0.0.1`, or `[::1]`. No embedded credentials, query, fragment, or surrounding spaces (the desktop window trims them). |
 | `api_key_env` | String | `"OPENAI_API_KEY"` | Name of an environment variable containing a nonempty bearer token. `""` omits authentication. Never put the actual key here. |
 | `transcription_model` | String | `"gpt-4o-mini-transcribe"` | Nonblank model name supported by your speech provider. Use `"gpt-4o-transcribe"` for higher accuracy at a higher price, or `"whisper-1"` for the previous default and most local servers. |
 | `language` | Optional string | Omitted | Omit for provider auto-detection; otherwise two lowercase ASCII letters, such as `"de"` or `"en"`. The provider determines language support. |
