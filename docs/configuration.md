@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Usage](usage.md) · [Development](development.md) · [Changelog](../CHANGELOG.md)
 
-The desktop window edits provider URL, models, language, cleanup, microphone, sounds, overlay, and insertion. It starts with an explicit `--config` file, otherwise `config.toml` beside `speakcraft.exe`, otherwise built-in defaults. Disable dictation to edit settings, then re-enable. **Enabling dictation writes the window's settings back to that file** (or creates `config.toml` beside the executable). The saved file keeps every setting, including `dictionary` and `max_recording_seconds`, but drops comments, so keep annotated copies elsewhere.
+The desktop window edits provider URL, models, language, cleanup, microphone, sounds, overlay, and insertion. It starts with an explicit `--config` file, otherwise `config.toml` beside `speakcraft.exe`, otherwise built-in defaults. Disable dictation to edit settings, then re-enable. **Enabling dictation writes the window's settings back to that file** (or creates `config.toml` beside the executable). The saved file keeps every setting, including `dictionary` and `max_recording_seconds`, but drops comments, so keep annotated copies elsewhere. If the file cannot be loaded, the window shows the error and built-in defaults for that session only and never overwrites the file; fix or remove it, then restart SpeakCraft.
 
 To prepare settings by hand, copy [config.example.toml](../config.example.toml) to `config.toml` beside the executable. Keep any existing file when upgrading. To open the desktop with a different file or validate it from PowerShell:
 

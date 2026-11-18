@@ -106,7 +106,8 @@ This command uploads the file to the configured provider and may incur charges; 
 | --- | --- |
 | Console disappears after double-clicking | You may be running the old console-only build. Rebuild and open `target\release\speakcraft.exe`; the current executable opens a desktop window without arguments. |
 | `Set the OPENAI_API_KEY environment variable` | Paste the key into the desktop API-key field, or set the variable in the same terminal used to launch a CLI command. Check `api_key_env` if customized. |
-| Window settings cannot be edited | Click **Disable dictation** first, then edit and re-enable. Changes are not saved between app launches. |
+| Window settings cannot be edited | Click **Disable dictation** first, then edit and re-enable. Enabling saves the settings for the next launch. |
+| `Could not load configuration` in the window | The file is left unchanged and the defaults shown apply to this session only. Fix the reported error (`speakcraft --config <file> check` shows it) or remove the file, then restart SpeakCraft. |
 | Hotkeys do nothing while SpeakCraft is focused | Focus a text field in another application; SpeakCraft excludes its own settings fields from dictation. |
 | Configuration error | Check spelling and value types. Unknown keys are rejected. Use `check` before `run`. |
 | `SpeakCraft is already running` | Use the open SpeakCraft window, or close it (or the console `run` session) first. |

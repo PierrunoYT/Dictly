@@ -98,12 +98,25 @@ impl Desktop {
                 .text_styles
                 .insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
         });
+        let loaded = match (&config, &path) {
+            (Ok(_), Some(path)) => format!("Loaded {}.", path.display()),
+            (Ok(_), None) => "Using built-in defaults.".to_owned(),
+            (Err(_), Some(path)) => format!(
+                "Could not load {}; it is left unchanged so its settings are not lost.",
+                path.display()
+            ),
+            (Err(_), None) => "Could not load the configuration.".to_owned(),
+        };
+        // A file that failed to load is never overwritten with the defaults shown
+        // instead: settings the window cannot edit (dictionary, recording limit)
+        // and a local-only provider URL would be silently lost.
+        let save_path = save_path.filter(|_| config.is_ok());
         let (config, mut error) = match config {
             Ok(config) => (config, None),
             Err(error) => (
                 Config::default(),
                 Some(format!(
-                    "Could not load configuration: {error:#}. Defaults are shown; review the settings before enabling dictation."
+                    "Could not load configuration: {error:#}. Defaults are shown for this session only; fix or remove the file, then restart SpeakCraft to save settings."
                 )),
             ),
         };
@@ -111,10 +124,6 @@ impl Desktop {
             error.get_or_insert_with(|| format!("{key_error:#}"));
             None
         });
-        let loaded = path.map_or_else(
-            || "Using built-in defaults.".to_owned(),
-            |path| format!("Loaded {}.", path.display()),
-        );
         Self {
             source: match &save_path {
                 Some(save) => format!(
@@ -388,7 +397,36 @@ mod tests {
     use super::*;
     use egui::accesskit::Role;
     use egui_kittest::{Harness, kittest::Queryable};
-    use std::time::Instant;
+    use std::{
+        sync::{LazyLock, Mutex, MutexGuard},
+        time::Instant,
+    };
+
+    /// Desktop tests run one at a time: an enabled worker registers the real
+    /// global shortcuts, which only one worker in the process can own.
+    ///
+    /// cpal caches its WASAPI device enumerator from the first thread that
+    /// lists devices; once that thread exits, later device calls crash. The app
+    /// lists devices on its long-lived UI thread, so tests make the first call
+    /// on a thread that also stays alive.
+    fn exclusive() -> MutexGuard<'static, ()> {
+        static SHORTCUTS: Mutex<()> = Mutex::new(());
+        static AUDIO: LazyLock<()> = LazyLock::new(|| {
+            let (ready, wait) = mpsc::channel();
+            thread::spawn(move || {
+                windows::microphones();
+                ready.send(()).unwrap();
+                loop {
+                    thread::park();
+                }
+            });
+            wait.recv().unwrap();
+        });
+        LazyLock::force(&AUDIO);
+        SHORTCUTS
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+    }
 
     fn wait_for(harness: &mut Harness<'_, Desktop>, label: &str) {
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -408,6 +446,7 @@ mod tests {
 
     #[test]
     fn desktop_reports_setup_errors_and_can_enable_disable_and_restart() {
+        let _exclusive = exclusive();
         let config = Config {
             base_url: "http://127.0.0.1:9/v1".into(),
             api_key_env: "SPEAKCRAFT_TEST_MISSING_CREDENTIAL".into(),
@@ -469,5 +508,44 @@ mod tests {
             );
             wait_for(&mut harness, "Enable dictation");
         }
+    }
+
+    #[test]
+    fn enabling_after_a_failed_load_never_overwrites_the_configuration_file() {
+        let _exclusive = exclusive();
+        let directory =
+            std::env::temp_dir().join(format!("speakcraft-unloadable-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("config.toml");
+        let original =
+            "base_url = \"http://127.0.0.1:9/v1\"\ndictionary = [\"Kubernetes\"]\nclenup = true\n";
+        std::fs::write(&path, original).unwrap();
+        let loaded = Config::load(Some(&path));
+        assert!(loaded.is_err());
+        let (shown, saved) = (path.clone(), path.clone());
+        let mut harness = Harness::builder()
+            .with_size([620.0, 820.0])
+            .build_eframe(|cc| {
+                Desktop::new(loaded, Some(shown), Some(saved), Ok(None), &cc.egui_ctx)
+            });
+        harness.run();
+        harness.get_by_label_contains("it is left unchanged");
+        harness
+            .get_by_role_and_label(Role::PasswordInput, "API key")
+            .click();
+        harness.run();
+        harness
+            .get_by_role_and_label(Role::PasswordInput, "API key")
+            .type_text("local-test-credential");
+        harness.run();
+        harness.get_by_label("Enable dictation").click();
+        wait_for(
+            &mut harness,
+            "Ready. Focus an editable text field before starting. Do not change fields until insertion finishes.",
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        harness.get_by_label("Disable dictation").click();
+        wait_for(&mut harness, "Enable dictation");
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 }
