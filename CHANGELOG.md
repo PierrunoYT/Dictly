@@ -4,10 +4,6 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ## Unreleased
 
-### Changed
-
-- Renamed the app from SpeakCraft to Dictly: the executable is now `dictly.exe`, the crate is `dictly`, and test variables use the `DICTLY_` prefix. An API key saved in Windows Credential Manager under the old name must be saved again.
-
 ### Added
 
 - Hold-to-talk: holding Ctrl+Alt+Space for at least half a second records until release. A quick tap still toggles recording.
@@ -28,7 +24,8 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Changed
 
-- Dictly is now licensed under GPL-3.0-or-later (previously MIT).
+- Renamed the app from SpeakCraft to Dictly: the executable is now `dictly.exe`, the crate is `dictly`, and test variables use the `DICTLY_` prefix. An API key saved in Windows Credential Manager under the old name must be saved again.
+- SpeakCraft is now licensed under GPL-3.0-or-later (previously MIT).
 - The default transcription model is now `gpt-4o-mini-transcribe` (previously `whisper-1`). In a live comparison it resolved a spoken self-correction that `whisper-1` turned into an invented date after cleanup. Set `transcription_model = "whisper-1"` to keep the old model.
 - Recordings above 16 kHz are downsampled to 16 kHz before upload, which cuts the upload to a third for 48 kHz microphones.
 - AI cleanup receives the dictionary terms so their spelling survives editing.
@@ -36,7 +33,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 - Without a Windows default input device, recording uses the first available microphone instead of failing.
 - Launching without a subcommand opens the desktop UI instead of printing help and exiting. CLI `run`, `transcribe`, `check`, help, and version remain available.
 - Minimize keeps dictation enabled; disabling or closing releases shortcuts and discards pending insertion and retained text. Dictly's own settings window is excluded from dictation targets.
-- Renamed the app to Dictly; the Rust package and executable are now `dictly` and `dictly.exe` on Windows. Existing configuration files, environment-variable names, and dictation shortcuts remain compatible. Update launch commands to the new executable path.
+- Renamed the app to SpeakCraft; the Rust package and executable are now `speakcraft` and `speakcraft.exe` on Windows. Existing configuration files, environment-variable names, and dictation shortcuts remain compatible. Update launch commands to the new executable path.
 - Reorganized the README around Windows quick start, features, build instructions, and links to detailed documentation.
 - Documented the difference between the original archive and the local Dictly build, upgrade steps, file-transcription usage, and unchanged configuration behavior.
 - Made the MVP status, API costs, cloud data flow, and unverified Windows desktop behavior explicit.
@@ -46,6 +43,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 - Typed insertion into Windows 11 Notepad arrived as one character repeated, such as `plain ssss…`, because Notepad reads the most recent injected character when it processes each keystroke. Dictly now types one character at a time, about 100 per second, and stops cleanly if focus changes or Esc is pressed mid-insertion.
 - Updated `rustls-webpki` to 0.103.17 and `webpki-roots` to 1.0.12 for TLS certificate-verification advisories RUSTSEC-2026-0382 and RUSTSEC-2026-0381, and replaced the yanked `clipboard-win` 5.4.1 with 5.4.3.
+- Updated `url` to 2.5.9 for RUSTSEC-2026-0592, `rustix` to 1.1.6 for the unsound advisory RUSTSEC-2026-0486, and replaced the yanked `async-executor` 1.14.0 with 1.14.1.
 - The desktop window no longer overwrites a configuration file it failed to load. Previously one typo made **Enable dictation** replace the file with defaults, losing the dictionary and recording limit and switching a local provider URL to OpenAI. The defaults now apply to that session only, and the window says the file was left unchanged.
 - Plain-HTTP loopback providers are no longer reached through `HTTP_PROXY` or `ALL_PROXY` from the environment. Previously a configured proxy received the audio, the API key, and the transcript in cleartext, and could return any text to be typed. HTTPS providers still honor proxy variables.
 - An API key emptied in the Windows Credential Manager control panel no longer aborts debug builds at launch or reads a null pointer in release builds. It is reported as unreadable so a new key can be entered.
