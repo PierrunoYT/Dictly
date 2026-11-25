@@ -23,7 +23,7 @@ The package rename produces `target\release\dictly.exe`; Cargo may leave an old 
 
 ## Linux development and Windows cross-build
 
-Linux and macOS can run the file-transcription and configuration commands, but `run` deliberately fails outside Windows. Only Linux was used for the current non-Windows tests.
+Linux and macOS can run the file-transcription and configuration commands, but `run` deliberately fails outside Windows. File transcription through Vercel AI Gateway and `cargo test` were checked on Linux and macOS 27; the cross-built Windows executable was also run under Wine, where the desktop test that registers global shortcuts fails because Wine has no interactive desktop.
 
 On a Debian-based Linux development machine, install stable Rust and the MinGW cross-linker:
 
