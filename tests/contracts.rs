@@ -131,6 +131,29 @@ fn cli_commands_keep_output_and_exit_codes_with_the_desktop_executable() {
 }
 
 #[test]
+fn redirected_transcribe_output_keeps_provider_text_unchanged() {
+    let (config, server) = provider(vec![(200, r#"{"text":"hello \u001b[31mred\r\nnext"}"#)]);
+    let directory = std::env::temp_dir().join(format!("dictly-cli-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let config_path = directory.join("config.toml");
+    let audio_path = directory.join("voice.wav");
+    config.save(&config_path).unwrap();
+    std::fs::write(&audio_path, wav()).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_dictly"))
+        .arg("--config")
+        .arg(&config_path)
+        .arg("transcribe")
+        .arg(&audio_path)
+        .output()
+        .unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    server.join().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    // Only terminal output is sanitized; a pipe receives the exact transcript.
+    assert_eq!(output.stdout, b"hello \x1b[31mred\r\nnext\n");
+}
+
+#[test]
 fn wav_preserves_pcm_and_rejects_silence_or_short_recordings() {
     let samples = [-1200, 2345, -32768, 32767].repeat(800);
     let bytes = encode_wav(&samples, 16_000).unwrap();

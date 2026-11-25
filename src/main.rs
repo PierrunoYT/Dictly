@@ -3,7 +3,11 @@
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
 use dictly::{audio::MAX_AUDIO_BYTES, config::Config, pipeline::Pipeline};
-use std::{io::Read, path::PathBuf, process::ExitCode};
+use std::{
+    io::{IsTerminal, Read},
+    path::PathBuf,
+    process::ExitCode,
+};
 
 #[derive(Parser)]
 #[command(
@@ -99,7 +103,13 @@ fn execute(args: Args) -> Result<()> {
             if result.cleanup_failed {
                 eprintln!("Cleanup failed; returning the original transcript.");
             }
-            println!("{}", result.text);
+            // Provider text is untrusted: escape sequences could retitle, clear, or
+            // write the clipboard of an interactive terminal. Redirected output stays raw.
+            if std::io::stdout().is_terminal() {
+                println!("{}", terminal_safe(&result.text));
+            } else {
+                println!("{}", result.text);
+            }
         }
         Command::Devices => {
             #[cfg(windows)]
@@ -117,4 +127,31 @@ fn execute(args: Args) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Replace control characters other than line feed and tab with U+FFFD.
+fn terminal_safe(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() && c != '\n' && c != '\t' {
+                char::REPLACEMENT_CHARACTER
+            } else {
+                c
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::terminal_safe;
+
+    #[test]
+    fn terminal_output_neutralizes_escape_sequences_but_keeps_lines_and_tabs() {
+        assert_eq!(
+            terminal_safe("hello \x1b]0;PWNED\x07\x1b[2J\u{9b}31m\r\nnext\tline\n"),
+            "hello \u{fffd}]0;PWNED\u{fffd}\u{fffd}[2J\u{fffd}31m\u{fffd}\nnext\tline\n"
+        );
+        assert_eq!(terminal_safe("Grüße, 東京 👋"), "Grüße, 東京 👋");
+    }
 }

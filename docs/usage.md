@@ -78,7 +78,7 @@ $env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
 
 This does not persist the key to future sessions. A desktop app launched separately from Explorer does not inherit a variable set only in this PowerShell session; use its API-key field instead.
 
-`transcribe` accepts nonempty files up to 24,000,000 bytes. Formats depend on the provider; the app does not convert existing files. It uses the same optional cleanup setting as live dictation, but never inserts text into another application. Warnings go to stderr; the transcript goes to stdout. Redirect stdout only if you intend to save that text.
+`transcribe` accepts nonempty files up to 24,000,000 bytes. Formats depend on the provider; the app does not convert existing files. It uses the same optional cleanup setting as live dictation, but never inserts text into another application. Warnings go to stderr; the transcript goes to stdout. Redirect stdout only if you intend to save that text. When stdout is a terminal, control characters other than line feed and tab (such as escape sequences and carriage returns from the provider) are shown as `�` so they cannot retitle, clear, or recolour the terminal. Redirected output keeps the provider's text unchanged; do not pipe it into a shell.
 
 For example, transcribe an existing file after configuring provider credentials:
 
