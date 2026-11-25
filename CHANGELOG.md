@@ -28,7 +28,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Changed
 
-- Dictly is now licensed under GPL-3.0-or-later (previously MIT), matching the other Freewright projects.
+- Dictly is now licensed under GPL-3.0-or-later (previously MIT).
 - The default transcription model is now `gpt-4o-mini-transcribe` (previously `whisper-1`). In a live comparison it resolved a spoken self-correction that `whisper-1` turned into an invented date after cleanup. Set `transcription_model = "whisper-1"` to keep the old model.
 - Recordings above 16 kHz are downsampled to 16 kHz before upload, which cuts the upload to a third for 48 kHz microphones.
 - AI cleanup receives the dictionary terms so their spelling survives editing.
