@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{io::Write, path::Path};
 
 /// How Windows dictation inserts text into the focused field.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
@@ -57,10 +57,7 @@ impl Default for Config {
 impl Config {
     pub fn load(path: Option<&Path>) -> Result<Self> {
         let config: Self = match path {
-            Some(path) => {
-                toml::from_str(&std::fs::read_to_string(path).context("Cannot read configuration")?)
-                    .context("Invalid configuration")?
-            }
+            Some(path) => toml::from_str(&read_text(path)?).context("Invalid configuration")?,
             None => Self::default(),
         };
         config.validate()?;
@@ -68,6 +65,7 @@ impl Config {
     }
 
     /// Write non-secret settings. Comments in an existing file are not preserved.
+    /// The file is replaced atomically, so a crash or full disk never leaves it truncated.
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()?;
         let text = format!(
@@ -75,8 +73,18 @@ impl Config {
 {}",
             toml::to_string(self).context("Cannot serialize configuration")?
         );
-        std::fs::write(path, text)
-            .with_context(|| format!("Cannot save settings to {}", path.display()))
+        let name = path.file_name().context("Settings path has no file name")?;
+        let temporary = path.with_file_name(format!(".{}.tmp", name.to_string_lossy()));
+        let written = std::fs::File::create(&temporary)
+            .and_then(|mut file| {
+                file.write_all(text.as_bytes())?;
+                file.sync_all()
+            })
+            .and_then(|()| std::fs::rename(&temporary, path));
+        if written.is_err() {
+            let _ = std::fs::remove_file(&temporary);
+        }
+        written.with_context(|| format!("Cannot save settings to {}", path.display()))
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -122,4 +130,20 @@ impl Config {
         }
         Ok(())
     }
+}
+
+/// Read a configuration file as UTF-8, naming the encoding problem when it is UTF-16.
+fn read_text(path: &Path) -> Result<String> {
+    let bytes = std::fs::read(path).context("Cannot read configuration")?;
+    // PowerShell 5's `>` and `Out-File` write UTF-16 by default.
+    ensure!(
+        !bytes.starts_with(&[0xFF, 0xFE]) && !bytes.starts_with(&[0xFE, 0xFF]),
+        "Configuration file {} is saved as UTF-16; save it as UTF-8 instead",
+        path.display()
+    );
+    let text = String::from_utf8(bytes).context("Configuration file is not valid UTF-8")?;
+    Ok(match text.strip_prefix('\u{feff}') {
+        Some(text) => text.to_owned(),
+        None => text,
+    })
 }

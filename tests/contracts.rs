@@ -99,6 +99,37 @@ fn session_credentials_authenticate_without_an_environment_variable() {
 }
 
 #[test]
+fn environment_api_keys_are_trimmed_like_typed_keys() {
+    let server = Server::http("127.0.0.1:0").unwrap();
+    let config = Config {
+        base_url: format!("http://{}/v1", server.server_addr()),
+        api_key_env: "DICTLY_TEST_PADDED_KEY".into(),
+        ..Config::default()
+    };
+    // SAFETY: only std reads the environment in this test process, and no
+    // other test uses this variable.
+    unsafe { std::env::set_var("DICTLY_TEST_PADDED_KEY", " padded-key \r\n") };
+    let worker = thread::spawn(move || {
+        let request = server
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
+        assert!(request.headers().iter().any(|header| {
+            header.field.equiv("Authorization") && header.value.as_str() == "Bearer padded-key"
+        }));
+        request
+            .respond(Response::from_string(r#"{"text":"Trimmed."}"#))
+            .unwrap();
+    });
+    let result = Pipeline::new(config)
+        .unwrap()
+        .transcribe(wav(), "voice.wav")
+        .unwrap();
+    assert_eq!(result.text, "Trimmed.");
+    worker.join().unwrap();
+}
+
+#[test]
 fn cli_commands_keep_output_and_exit_codes_with_the_desktop_executable() {
     let version = format!("dictly {}", env!("CARGO_PKG_VERSION"));
     for (args, expected) in [
@@ -241,7 +272,7 @@ fn transcription_uploads_audio_language_and_dictionary_without_cleanup() {
         .transcribe(audio.clone(), "voice.wav")
         .unwrap();
     assert_eq!(result.text, "Grüezi Zürich 👋");
-    assert!(!result.cleanup_failed);
+    assert!(result.cleanup_error.is_none());
     let requests = server.join().unwrap();
     assert_eq!(requests[0].0, "/v1/audio/transcriptions");
     let body = String::from_utf8_lossy(&requests[0].1);
@@ -273,7 +304,7 @@ fn cleanup_returns_edited_text_and_sends_dictation_as_data() {
         .transcribe(wav(), "voice.wav")
         .unwrap();
     assert_eq!(result.text, "Meet at 4 in Zürich.");
-    assert!(!result.cleanup_failed);
+    assert!(result.cleanup_error.is_none());
     let requests = server.join().unwrap();
     assert_eq!(requests[1].0, "/v1/chat/completions");
     let body: serde_json::Value = serde_json::from_slice(&requests[1].1).unwrap();
@@ -289,11 +320,15 @@ fn cleanup_returns_edited_text_and_sends_dictation_as_data() {
 
 #[test]
 fn unavailable_or_empty_cleanup_never_loses_the_original_transcript() {
-    for reply in [
-        (503, "unavailable"),
-        (200, r#"{"choices":[]}"#),
-        (200, r#"{"choices":[{"message":{"content":" "}}]}"#),
-        (200, "not json"),
+    // The cause is reported so a rejected key is distinguishable from an empty reply.
+    for (reply, cause) in [
+        ((503, "unavailable"), "HTTP 503"),
+        ((200, r#"{"choices":[]}"#), "no text"),
+        (
+            (200, r#"{"choices":[{"message":{"content":" "}}]}"#),
+            "empty text",
+        ),
+        ((200, "not json"), "invalid JSON"),
     ] {
         let (mut config, server) =
             provider(vec![(200, r#"{"text":"Original 17, not 71."}"#), reply]);
@@ -303,7 +338,8 @@ fn unavailable_or_empty_cleanup_never_loses_the_original_transcript() {
             .transcribe(wav(), "voice.wav")
             .unwrap();
         assert_eq!(result.text, "Original 17, not 71.");
-        assert!(result.cleanup_failed);
+        let error = result.cleanup_error.expect("cleanup failure");
+        assert!(error.contains(cause), "{error}");
         server.join().unwrap();
     }
 }
@@ -363,7 +399,8 @@ fn oversized_provider_responses_are_rejected_before_parsing() {
         if cleanup {
             let transcript = result.unwrap();
             assert_eq!(transcript.text, "Original.");
-            assert!(transcript.cleanup_failed);
+            let error = transcript.cleanup_error.expect("oversized cleanup");
+            assert!(error.contains("exceeds 1 MB"), "{error}");
         } else {
             let error = format!("{:#}", result.err().expect("oversized transcription"));
             assert!(error.contains("exceeds 1 MB"), "{error}");
@@ -522,6 +559,20 @@ fn settings_round_trip_through_a_saved_file_and_old_files_still_load() {
         .save(&path)
         .is_err()
     );
+    // Saving replaces the existing file through a temporary file that does not linger.
+    Config::default().save(&path).unwrap();
+    assert_eq!(Config::load(Some(&path)).unwrap().language, None);
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+    // PowerShell 5 writes UTF-16 with `>`; UTF-8 with a BOM still loads.
+    let utf16: Vec<u8> = [0xFF, 0xFE]
+        .into_iter()
+        .chain("cleanup = true\n".encode_utf16().flat_map(u16::to_le_bytes))
+        .collect();
+    std::fs::write(&path, utf16).unwrap();
+    let error = format!("{:#}", Config::load(Some(&path)).err().unwrap());
+    assert!(error.contains("UTF-16"), "{error}");
+    std::fs::write(&path, "\u{feff}cleanup = true\n").unwrap();
+    assert!(Config::load(Some(&path)).unwrap().cleanup);
     std::fs::remove_dir_all(&directory).unwrap();
 
     let old: Config =

@@ -100,8 +100,8 @@ fn execute(args: Args) -> Result<()> {
                 .and_then(|name| name.to_str())
                 .context("Invalid filename")?;
             let result = Pipeline::new(config)?.transcribe(bytes, name)?;
-            if result.cleanup_failed {
-                eprintln!("Cleanup failed; returning the original transcript.");
+            if let Some(error) = &result.cleanup_error {
+                eprintln!("Cleanup failed ({error}); returning the original transcript.");
             }
             // Provider text is untrusted: escape sequences could retitle, clear, or
             // write the clipboard of an interactive terminal. Redirected output stays raw.

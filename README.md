@@ -37,7 +37,7 @@ Use Windows 10/11 x64. [Build from source](#build-from-source) to get the curren
 
 You need your own speech provider credentials. Audio is sent to that provider after recording stops; cleanup sends the transcript in a second request when enabled. Provider charges and privacy policies apply. Enabling dictation registers shortcuts but does not start recording or verify your key with the provider.
 
-Enabling dictation saves the window's non-secret settings to `config.toml` beside the executable (or to the file given with `--config`), and desktop launch reads that file next time. Saving rewrites the file without comments. Keep existing configuration files when upgrading. See [configuration](docs/configuration.md) for every setting and for environment-variable credentials.
+Enabling dictation saves the window's non-secret settings to `config.toml` beside the executable (or to the file given with `--config`), and desktop launch reads that file next time. Saving rewrites the file without comments, replacing it in one step so an interrupted save never leaves it truncated. Keep existing configuration files when upgrading. See [configuration](docs/configuration.md) for every setting and for environment-variable credentials.
 
 Allow desktop microphone access in Windows privacy settings. Focus Notepad, hold **Ctrl+Alt+Space** while you speak, and release it to finish. Alternatively, tap the shortcut, speak, and tap it again. A tone and an on-screen status pill show when Dictly is recording. Keep the same text field focused until processing finishes; returning to Dictly during processing counts as a focus change.
 

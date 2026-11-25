@@ -489,10 +489,11 @@ pub(crate) fn run_controlled(
                 }
                 match result {
                     Ok(transcript) => {
-                        let warning = if transcript.cleanup_failed {
-                            "Cleanup failed; using original transcription. "
-                        } else {
-                            ""
+                        let warning = match &transcript.cleanup_error {
+                            Some(error) => {
+                                format!("Cleanup failed ({error}); using original transcription. ")
+                            }
+                            None => String::new(),
                         };
                         let insertion = if focus_changed {
                             Err(anyhow::anyhow!("Focus changed during dictation"))

@@ -25,8 +25,8 @@ pub struct Pipeline {
 
 pub struct Transcript {
     pub text: String,
-    /// Failed optional cleanup preserves the original transcription.
-    pub cleanup_failed: bool,
+    /// Why optional cleanup failed; the original transcription is kept.
+    pub cleanup_error: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -57,8 +57,10 @@ impl Pipeline {
         } else {
             let value = std::env::var(&config.api_key_env)
                 .with_context(|| format!("Set the {} environment variable", config.api_key_env))?;
-            ensure!(!value.trim().is_empty(), "API key must not be empty");
-            Some(value)
+            // Match the desktop, which trims typed keys: a stray space would give a 401.
+            let value = value.trim();
+            ensure!(!value.is_empty(), "API key must not be empty");
+            Some(value.to_owned())
         };
         Self::with_api_key(config, key)
     }
@@ -214,17 +216,17 @@ impl Pipeline {
         if !self.config.cleanup || canceled.load(Ordering::Acquire) {
             return Ok(Transcript {
                 text,
-                cleanup_failed: false,
+                cleanup_error: None,
             });
         }
         match self.cleanup(&text) {
             Ok(cleaned) => Ok(Transcript {
                 text: cleaned,
-                cleanup_failed: false,
+                cleanup_error: None,
             }),
-            Err(_) => Ok(Transcript {
+            Err(error) => Ok(Transcript {
                 text,
-                cleanup_failed: true,
+                cleanup_error: Some(format!("{error:#}")),
             }),
         }
     }
@@ -246,13 +248,14 @@ impl Pipeline {
                     {"role": "user", "content": text}
                 ]
             }))
-            .send()?;
+            .send()
+            .context("Cleanup request failed")?;
         ensure!(
             response.status().is_success(),
             "Cleanup provider returned HTTP {}",
             response.status()
         );
-        let result: Completion = read_json(response)?;
+        let result: Completion = read_json(response).context("Invalid cleanup response")?;
         let text = result
             .choices
             .into_iter()

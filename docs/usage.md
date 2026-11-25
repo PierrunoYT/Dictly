@@ -110,6 +110,7 @@ This command uploads the file to the configured provider and may incur charges; 
 | `Could not load configuration` in the window | The file is left unchanged and the defaults shown apply to this session only. Fix the reported error (`dictly --config <file> check` shows it) or remove the file, then restart Dictly. |
 | Hotkeys do nothing while Dictly is focused | Focus a text field in another application; Dictly excludes its own settings fields from dictation. |
 | Configuration error | Check spelling and value types. Unknown keys are rejected. Use `check` before `run`. |
+| `saved as UTF-16` | The file was written as UTF-16, for example with PowerShell 5's `>` or `Out-File`. Save it as UTF-8, for example with `Set-Content -Encoding utf8`, or re-save it in Notepad as UTF-8. |
 | `Dictly is already running` | Use the open Dictly window, or close it (or the console `run` session) first. |
 | `No microphone found` or `Microphone "…" is not connected` | Connect a microphone, click **Refresh**, and choose it or **Windows default**. `dictly devices` lists the names Windows offers; an empty list means Windows reports no active input device. |
 | No default microphone or access denied | Check desktop microphone permissions, device connection, and other apps holding the device. |
@@ -120,7 +121,7 @@ This command uploads the file to the configured provider and may incur charges; 
 | HTTP 404 | Check the API base URL and configured model. The app appends `/audio/transcriptions` and `/chat/completions`. |
 | HTTP 429 or 5xx | Dictly already retried once. Check quota or provider availability and record again later. |
 | Repeated characters in Notepad (`ssss…`) | Builds before 2026-10-16 typed the whole transcript in one batch. Update Dictly, or set `insertion = "paste"`. |
-| Cleanup failed | The original transcript is used. Confirm that the provider supports chat completions and the configured cleanup model. |
+| Cleanup failed | The original transcript is used. The cause follows in parentheses: for an HTTP 401/403 check the key and model access; for a 404 or no/empty text confirm that the provider supports chat completions and the configured cleanup model. |
 | Text retained or shortcut-release warning | Focus the intended field, press Ctrl+Alt+V, and release all shortcut/modifier keys promptly. |
 | Recording stops when releasing the shortcut | That is hold-to-talk. Tap the shortcut (shorter than half a second) for hands-free recording. |
 | No text or partial text despite insertion | Try non-elevated Notepad. Elevated apps, secure desktops, games, and some editors may reject Unicode input. Do not elevate the dictation app as a general workaround. |
