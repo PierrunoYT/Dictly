@@ -12,7 +12,7 @@ use windows_sys::Win32::{
             CloseClipboard, EmptyClipboard, EnumClipboardFormats, GetClipboardData, OpenClipboard,
             RegisterClipboardFormatW, SetClipboardData,
         },
-        Memory::{GMEM_MOVEABLE, GMEM_ZEROINIT, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock},
+        Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock},
     },
 };
 
@@ -24,7 +24,11 @@ const CF_LOCALE: u32 = 16;
 /// Clipboard contents before pasting.
 pub enum Saved {
     Empty,
-    Text(Vec<u16>),
+    /// Text and its CF_LOCALE identifier, when the clipboard carried one.
+    Text {
+        units: Vec<u16>,
+        locale: Option<u32>,
+    },
 }
 
 struct Open;
@@ -56,20 +60,22 @@ pub fn save() -> Result<Option<Saved>> {
     let _open = Open::new()?;
     let mut format = 0;
     let mut has_text = false;
+    let mut has_locale = false;
     loop {
         // SAFETY: the clipboard is open.
         format = unsafe { EnumClipboardFormats(format) };
         match format {
             0 => break,
             CF_UNICODETEXT => has_text = true,
-            CF_TEXT | CF_OEMTEXT | CF_LOCALE => {}
+            CF_LOCALE => has_locale = true,
+            CF_TEXT | CF_OEMTEXT => {}
             _ => return Ok(None),
         }
     }
     if !has_text {
         return Ok(Some(Saved::Empty));
     }
-    // SAFETY: the clipboard owns the handle; the lock is released before closing.
+    // SAFETY: the clipboard owns the handles; each lock is released before closing.
     unsafe {
         let handle = GetClipboardData(CF_UNICODETEXT);
         if handle.is_null() {
@@ -83,13 +89,33 @@ pub fn save() -> Result<Option<Saved>> {
         let units = std::slice::from_raw_parts(pointer, capacity);
         let text = units[..units.iter().position(|&unit| unit == 0).unwrap_or(capacity)].to_vec();
         GlobalUnlock(handle);
-        Ok(Some(Saved::Text(text)))
+        let mut locale = None;
+        let handle = if has_locale {
+            GetClipboardData(CF_LOCALE)
+        } else {
+            null_mut()
+        };
+        if !handle.is_null() && GlobalSize(handle) >= 4 {
+            let pointer = GlobalLock(handle) as *const u32;
+            if !pointer.is_null() {
+                locale = Some(pointer.read_unaligned());
+                GlobalUnlock(handle);
+            }
+        }
+        Ok(Some(Saved::Text {
+            units: text,
+            locale,
+        }))
     }
 }
 
 /// Replace the clipboard with `units`. Private text is marked so Windows
 /// clipboard history, cloud sync, and clipboard monitors skip it.
 pub fn set(units: &[u16], private: bool) -> Result<()> {
+    write(units, None, private)
+}
+
+fn write(units: &[u16], locale: Option<u32>, private: bool) -> Result<()> {
     let _open = Open::new()?;
     // SAFETY: the clipboard is open; ownership of each successfully set
     // allocation passes to the system, and failed ones are freed here.
@@ -109,6 +135,11 @@ pub fn set(units: &[u16], private: bool) -> Result<()> {
             GlobalFree(memory);
             bail!("Cannot write to the clipboard");
         }
+        // Without CF_LOCALE, Windows derives one from the current keyboard
+        // layout, which changes how CF_TEXT is synthesized for other apps.
+        if let Some(locale) = locale {
+            set_dword(CF_LOCALE, locale);
+        }
         if private {
             for name in [
                 "ExcludeClipboardContentFromMonitorProcessing",
@@ -117,9 +148,8 @@ pub fn set(units: &[u16], private: bool) -> Result<()> {
             ] {
                 let format = RegisterClipboardFormatW(wide(name).as_ptr());
                 // A zero DWORD means "no" for the two Can* formats.
-                let flag = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 4);
-                if format != 0 && !flag.is_null() && SetClipboardData(format, flag).is_null() {
-                    GlobalFree(flag);
+                if format != 0 {
+                    set_dword(format, 0);
                 }
             }
         }
@@ -127,9 +157,33 @@ pub fn set(units: &[u16], private: bool) -> Result<()> {
     Ok(())
 }
 
+/// Best effort: put a DWORD on the clipboard, freeing it if Windows refuses.
+///
+/// # Safety
+/// The clipboard must be open and emptied by this thread.
+unsafe fn set_dword(format: u32, value: u32) {
+    // SAFETY: per the caller; a successfully set allocation belongs to the system.
+    unsafe {
+        let memory = GlobalAlloc(GMEM_MOVEABLE, 4);
+        if memory.is_null() {
+            return;
+        }
+        let pointer = GlobalLock(memory) as *mut u32;
+        if pointer.is_null() {
+            GlobalFree(memory);
+            return;
+        }
+        pointer.write_unaligned(value);
+        GlobalUnlock(memory);
+        if SetClipboardData(format, memory).is_null() {
+            GlobalFree(memory);
+        }
+    }
+}
+
 pub fn restore(saved: Saved) -> Result<()> {
     match saved {
-        Saved::Text(units) => set(&units, false),
+        Saved::Text { units, locale } => write(&units, locale, false),
         Saved::Empty => {
             let _open = Open::new()?;
             // SAFETY: the clipboard is open.

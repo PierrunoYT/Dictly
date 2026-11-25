@@ -113,8 +113,7 @@ impl Capture {
     /// as if it had been captured. Only compiled with the `test-audio` feature.
     #[cfg(feature = "test-audio")]
     fn from_file(path: &std::path::Path, seconds: u32) -> Result<Self> {
-        let mut reader =
-            hound::WavReader::open(path).context("Cannot open DICTLY_TEST_AUDIO")?;
+        let mut reader = hound::WavReader::open(path).context("Cannot open DICTLY_TEST_AUDIO")?;
         let spec = reader.spec();
         ensure!(
             spec.channels > 0 && spec.bits_per_sample == 16,

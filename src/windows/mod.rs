@@ -69,15 +69,10 @@ impl SingleInstance {
         // SAFETY: name is NUL-terminated; the handle is closed on drop or below.
         unsafe {
             let handle = CreateMutexW(std::ptr::null(), 0, name.as_ptr());
-            ensure!(
-                !handle.is_null(),
-                "Cannot check for another running Dictly"
-            );
+            ensure!(!handle.is_null(), "Cannot check for another running Dictly");
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 CloseHandle(handle);
-                bail!(
-                    "Dictly is already running. Use the open Dictly window or close it first."
-                );
+                bail!("Dictly is already running. Use the open Dictly window or close it first.");
             }
             Ok(Self(handle))
         }
@@ -256,8 +251,12 @@ impl Feedback {
 fn shortcut_held() -> bool {
     [VK_CONTROL, VK_MENU, VK_SPACE]
         .iter()
-        // SAFETY: GetAsyncKeyState only reads global key state.
-        .all(|&key| unsafe { GetAsyncKeyState(key as i32) } < 0)
+        .all(|&key| key_down(key))
+}
+
+fn key_down(key: u16) -> bool {
+    // SAFETY: GetAsyncKeyState only reads global key state.
+    unsafe { GetAsyncKeyState(key as i32) < 0 }
 }
 
 /// Set by Ctrl+C, Ctrl+Break, or closing the console; stops console `run` the
@@ -334,6 +333,7 @@ pub(crate) fn run_controlled(
             *focus_changed |= Target::current() != Some(*target);
         }
         feedback.tick();
+        // SAFETY: MSG is plain data, for which all-zero bytes are valid.
         let mut message: MSG = unsafe { std::mem::zeroed() };
         // SAFETY: message is a valid writable MSG.
         while unsafe { PeekMessageW(&mut message, null_mut(), 0, 0, PM_REMOVE) } != 0 {
@@ -598,10 +598,7 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
     let started = Instant::now();
     loop {
         ensure!(!stopped.load(Ordering::Acquire), "Dictation disabled");
-        ensure!(
-            unsafe { GetAsyncKeyState(VK_ESCAPE as i32) } >= 0,
-            "Insertion canceled"
-        );
+        ensure!(!key_down(VK_ESCAPE), "Insertion canceled");
         ensure!(
             Target::current() == Some(target),
             "Target field changed; insertion skipped"
@@ -610,7 +607,7 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
             VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN, VK_SPACE, 0x56,
         ]
         .iter()
-        .any(|&key| unsafe { GetAsyncKeyState(key as i32) } < 0);
+        .any(|&key| key_down(key));
         if !held {
             break;
         }
@@ -637,7 +634,7 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
     for (typed, c) in text.chars().enumerate() {
         let interrupted = if stopped.load(Ordering::Acquire) {
             Some("dictation disabled")
-        } else if unsafe { GetAsyncKeyState(VK_ESCAPE as i32) } < 0 {
+        } else if key_down(VK_ESCAPE) {
             Some("Esc pressed")
         } else if Target::current() != Some(target) {
             Some("target field changed")
