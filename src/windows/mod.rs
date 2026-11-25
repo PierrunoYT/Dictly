@@ -596,16 +596,11 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
         );
         thread::sleep(Duration::from_millis(10));
     }
+    let text = insertion_text(text)?;
     let units: Vec<_> = text.encode_utf16().collect();
     ensure!(
         units.len() <= 16_000,
         "Transcript too long for one insertion"
-    );
-    ensure!(
-        !text
-            .chars()
-            .any(|c| c.is_control() && c != '\n' && c != '\t' && c != '\r'),
-        "Transcript contains unsupported control characters"
     );
     if method == Insertion::Paste {
         // Anything but plain text could not be restored, so type instead.
@@ -638,6 +633,35 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
         thread::sleep(TYPING_INTERVAL);
     }
     Ok(())
+}
+
+/// Prepare provider-controlled text for insertion. Line endings become `\n`,
+/// so a lone CR is never typed or pasted. Bidi embeddings, overrides, and
+/// isolates (U+202A–U+202E, U+2066–U+2069) and the zero-width characters
+/// U+200B, U+200C, U+2060, and U+FEFF are removed: they could reorder or hide
+/// inserted text. The zero-width joiner U+200D stays because emoji sequences
+/// need it. Any other control character except tab rejects the transcript.
+fn insertion_text(text: &str) -> Result<String> {
+    let mut output = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\r' => {
+                chars.next_if_eq(&'\n');
+                output.push('\n');
+            }
+            '\u{202A}'..='\u{202E}'
+            | '\u{2066}'..='\u{2069}'
+            | '\u{200B}'
+            | '\u{200C}'
+            | '\u{2060}'
+            | '\u{FEFF}' => {}
+            '\n' | '\t' => output.push(c),
+            c if c.is_control() => bail!("Transcript contains unsupported control characters"),
+            c => output.push(c),
+        }
+    }
+    Ok(output)
 }
 
 fn key_event(key: u16, scan: u16, flags: u32) -> INPUT {
@@ -696,4 +720,40 @@ fn paste(
     pasted?;
     restored
         .map_err(|error| error.context("Text was pasted, but the clipboard could not be restored"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insertion_text_normalises_line_endings() {
+        assert_eq!(insertion_text("a\r\nb\rc\nd").unwrap(), "a\nb\nc\nd");
+        assert_eq!(insertion_text("a\r\r\nb").unwrap(), "a\n\nb");
+        assert_eq!(insertion_text("tab\there").unwrap(), "tab\there");
+    }
+
+    #[test]
+    fn insertion_text_strips_bidi_and_zero_width_characters() {
+        let text =
+            "\u{202A}a\u{202B}b\u{202C}c\u{202D}d\u{202E}e\u{2066}f\u{2067}g\u{2068}h\u{2069}";
+        assert_eq!(insertion_text(text).unwrap(), "abcdefgh");
+        assert_eq!(
+            insertion_text("\u{FEFF}zero\u{200B}width\u{200C}chars\u{2060}").unwrap(),
+            "zerowidthchars"
+        );
+    }
+
+    #[test]
+    fn insertion_text_keeps_zero_width_joiner() {
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        assert_eq!(insertion_text(family).unwrap(), family);
+    }
+
+    #[test]
+    fn insertion_text_rejects_other_control_characters() {
+        for text in ["a\u{0}b", "a\u{1B}[31mb", "a\u{7F}", "a\u{85}b"] {
+            assert!(insertion_text(text).is_err(), "{text:?}");
+        }
+    }
 }
