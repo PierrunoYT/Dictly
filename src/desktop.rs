@@ -25,7 +25,16 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
     let save_path = config_path.clone().or_else(|| beside_exe.clone());
     let path = config_path.or_else(|| beside_exe.filter(|path| path.exists()));
     let config = Config::load(path.as_deref());
-    let saved_key = windows::credential::load();
+    // A saved key is offered only to the provider origin it was saved for; a
+    // configuration that points elsewhere starts with an empty key field.
+    let shown_url = config.as_ref().map_or_else(
+        |_| Config::default().base_url,
+        |config| config.base_url.clone(),
+    );
+    let saved_key = match windows::credential::origin(shown_url.trim()) {
+        Some(origin) => windows::credential::load(&origin),
+        None => Ok(None),
+    };
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Dictly")
@@ -69,7 +78,11 @@ struct Desktop {
     authenticated: bool,
     /// Store the typed key in Windows Credential Manager when enabling.
     remember_key: bool,
-    key_saved: bool,
+    /// Provider origin whose key is known to be saved in Credential Manager.
+    saved_origin: Option<String>,
+    /// Origin of the saved key prefilled into `api_key`, until the key is
+    /// edited. The key is cleared when the provider URL leaves that origin.
+    prefilled_origin: Option<String>,
     microphones: Vec<String>,
     worker: Option<Worker>,
     ready: bool,
@@ -124,6 +137,9 @@ impl Desktop {
             error.get_or_insert_with(|| format!("{key_error:#}"));
             None
         });
+        let saved_origin = saved_key
+            .as_ref()
+            .and_then(|_| windows::credential::origin(config.base_url.trim()));
         Self {
             source: match &save_path {
                 Some(save) => format!(
@@ -137,7 +153,8 @@ impl Desktop {
             authenticated: !config.api_key_env.is_empty(),
             config,
             remember_key: saved_key.is_some(),
-            key_saved: saved_key.is_some(),
+            prefilled_origin: saved_origin.clone(),
+            saved_origin,
             api_key: saved_key.unwrap_or_default(),
             microphones: windows::microphones(),
             worker: None,
@@ -149,7 +166,19 @@ impl Desktop {
         }
     }
 
+    /// Clears a prefilled saved key once the provider URL has another origin,
+    /// so the key is never sent to a provider it was not saved for.
+    fn provider_changed(&mut self) {
+        if let Some(prefilled) = &self.prefilled_origin
+            && windows::credential::origin(self.config.base_url.trim()).as_ref() != Some(prefilled)
+        {
+            self.api_key.clear();
+            self.prefilled_origin = None;
+        }
+    }
+
     fn start(&mut self, ctx: &egui::Context) {
+        self.provider_changed();
         let mut config = self.config.clone();
         // Pasted values often carry a trailing space or newline.
         for field in [
@@ -175,6 +204,10 @@ impl Desktop {
             self.error = Some(format!("{error:#}"));
             return;
         }
+        let Some(origin) = windows::credential::origin(&config.base_url) else {
+            self.error = Some("base_url must be an HTTP or HTTPS URL".into());
+            return;
+        };
         // A typed key overrides the environment for this worker only.
         let key = if self.authenticated && !self.api_key.trim().is_empty() {
             Some(self.api_key.trim().to_owned())
@@ -189,14 +222,18 @@ impl Desktop {
             problems.push(format!("{error:#}"));
         }
         match (&key, self.remember_key) {
-            (Some(key), true) => match windows::credential::save(key) {
-                Ok(()) => self.key_saved = true,
+            (Some(key), true) => match windows::credential::save(&origin, key) {
+                Ok(()) => self.saved_origin = Some(origin),
                 Err(error) => problems.push(format!("{error:#}")),
             },
-            (_, false) if self.key_saved => match windows::credential::delete() {
-                Ok(()) => self.key_saved = false,
-                Err(error) => problems.push(format!("{error:#}")),
-            },
+            (_, false) => {
+                if let Some(saved) = self.saved_origin.take()
+                    && let Err(error) = windows::credential::delete(&saved)
+                {
+                    problems.push(format!("{error:#}"));
+                    self.saved_origin = Some(saved);
+                }
+            }
             _ => {}
         }
         let stop = Arc::new(AtomicBool::new(false));
@@ -317,18 +354,22 @@ impl eframe::App for Desktop {
                     ui.add_space(6.0);
                     ui.add_enabled_ui(self.worker.is_none(), |ui| {
                         let label = ui.label("Provider URL");
-                        ui.add(egui::TextEdit::singleline(&mut self.config.base_url).desired_width(f32::INFINITY)).labelled_by(label.id);
+                        if ui.add(egui::TextEdit::singleline(&mut self.config.base_url).desired_width(f32::INFINITY)).labelled_by(label.id).changed() {
+                            self.provider_changed();
+                        }
                         let label = ui.label("Transcription model");
                         ui.add(egui::TextEdit::singleline(&mut self.config.transcription_model).desired_width(f32::INFINITY)).labelled_by(label.id);
                         ui.checkbox(&mut self.authenticated, "Provider requires an API key");
                         if self.authenticated {
                             let label = ui.label("API key");
-                            ui.add(egui::TextEdit::singleline(&mut self.api_key).password(true)
-                                .hint_text("Paste your API key here").desired_width(f32::INFINITY)).labelled_by(label.id);
+                            if ui.add(egui::TextEdit::singleline(&mut self.api_key).password(true)
+                                .hint_text("Paste your API key here").desired_width(f32::INFINITY)).labelled_by(label.id).changed() {
+                                self.prefilled_origin = None;
+                            }
                             ui.checkbox(&mut self.remember_key, "Remember this key on this PC (Windows Credential Manager)");
                             let env = if self.config.api_key_env.is_empty() { "OPENAI_API_KEY" } else { &self.config.api_key_env };
                             ui.small(if self.remember_key {
-                                "Saved for your Windows account when you enable dictation; never written to the settings file.".to_owned()
+                                "Saved for this provider and your Windows account when you enable dictation; never written to the settings file.".to_owned()
                             } else {
                                 format!("Used for this session only. Leave blank to use {env} from the environment.")
                             });
@@ -391,8 +432,8 @@ impl eframe::App for Desktop {
                     });
                     ui.label("Audio is sent to your configured provider. AI cleanup also sends the transcript. Provider charges and privacy policies apply.");
                     ui.small("Minimize this window to keep dictating. Closing it stops dictation. No tray icon or background autostart.");
-                    if self.key_saved {
-                        ui.small("An API key is saved in Windows Credential Manager. Uncheck \u{201c}Remember this key\u{201d} and enable dictation to remove it.");
+                    if let Some(origin) = &self.saved_origin {
+                        ui.small(format!("An API key for {origin} is saved in Windows Credential Manager. Uncheck \u{201c}Remember this key\u{201d} and enable dictation to remove it."));
                     }
                     ui.small(&self.source);
                 });
@@ -470,9 +511,8 @@ mod tests {
             &mut harness,
             "Dictation disabled. No new audio will be recorded or inserted.",
         );
-        harness.get_by_label_contains(
-            "Set the DICTLY_TEST_MISSING_CREDENTIAL environment variable",
-        );
+        harness
+            .get_by_label_contains("Set the DICTLY_TEST_MISSING_CREDENTIAL environment variable");
         wait_for(&mut harness, "Enable dictation");
 
         harness
@@ -566,5 +606,50 @@ mod tests {
         harness.get_by_label("Disable dictation").click();
         wait_for(&mut harness, "Enable dictation");
         std::fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn a_saved_key_is_never_offered_to_another_provider_origin() {
+        let _exclusive = exclusive();
+        let config = Config {
+            base_url: "http://127.0.0.1:9/v1".into(),
+            ..Config::default()
+        };
+        let mut harness = Harness::builder()
+            .with_size([620.0, 820.0])
+            .build_eframe(|cc| {
+                Desktop::new(
+                    Ok(config),
+                    None,
+                    None,
+                    Ok(Some("saved-key".into())),
+                    &cc.egui_ctx,
+                )
+            });
+        harness.run();
+        assert_eq!(harness.state().api_key, "saved-key");
+        harness.get_by_label_contains("An API key for http://127.0.0.1:9 is saved");
+        // Another path on the same origin keeps the saved key.
+        harness
+            .get_by_role_and_label(Role::TextInput, "Provider URL")
+            .click();
+        harness.run();
+        harness.key_press(egui::Key::End);
+        harness
+            .get_by_role_and_label(Role::TextInput, "Provider URL")
+            .type_text("/");
+        harness.run();
+        assert_eq!(harness.state().api_key, "saved-key");
+        // Another host drops it before it can be sent anywhere.
+        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        harness
+            .get_by_role_and_label(Role::TextInput, "Provider URL")
+            .type_text("https://attacker.example/v1");
+        harness.run();
+        assert_eq!(
+            harness.state().config.base_url,
+            "https://attacker.example/v1"
+        );
+        assert!(harness.state().api_key.is_empty());
     }
 }

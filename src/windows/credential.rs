@@ -1,5 +1,7 @@
 //! Optional API-key storage in Windows Credential Manager (per user, this PC).
 //! The key never touches the configuration file or the process environment.
+//! Each key is stored under its provider's origin and only offered back for
+//! that origin, so a configuration pointing elsewhere never receives it.
 
 use super::wide;
 use anyhow::{Result, bail, ensure};
@@ -12,18 +14,35 @@ use windows_sys::Win32::{
     },
 };
 
-const TARGET: &str = "Dictly/API key";
+/// Unbound entry written by earlier builds; removed when a key is saved or
+/// removed so it cannot linger without a provider.
+const LEGACY_TARGET: &str = "Dictly/API key";
 
-pub fn load() -> Result<Option<String>> {
-    load_from(TARGET)
+/// The provider origin a key is bound to, such as `https://api.openai.com`:
+/// scheme, host, and non-default port of `base_url`, without path or case
+/// differences. `None` for anything but an HTTP(S) URL.
+pub fn origin(base_url: &str) -> Option<String> {
+    let url = reqwest::Url::parse(base_url).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.origin().ascii_serialization())
 }
 
-pub fn save(key: &str) -> Result<()> {
-    save_to(TARGET, key)
+/// Credential Manager target name for the key of one provider origin.
+fn target(origin: &str) -> String {
+    format!("Dictly/API key/{origin}")
 }
 
-pub fn delete() -> Result<()> {
-    delete_from(TARGET)
+pub fn load(origin: &str) -> Result<Option<String>> {
+    load_from(&target(origin))
+}
+
+pub fn save(origin: &str, key: &str) -> Result<()> {
+    save_to(&target(origin), key)?;
+    delete_from(LEGACY_TARGET)
+}
+
+pub fn delete(origin: &str) -> Result<()> {
+    delete_from(&target(origin))?;
+    delete_from(LEGACY_TARGET)
 }
 
 fn load_from(target: &str) -> Result<Option<String>> {
@@ -91,6 +110,33 @@ fn delete_from(target: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_are_bound_to_the_provider_origin() {
+        let openai = origin("https://api.openai.com/v1").unwrap();
+        assert_eq!(openai, "https://api.openai.com");
+        assert_eq!(target(&openai), "Dictly/API key/https://api.openai.com");
+        for same in [
+            "https://API.OpenAI.com/v1/",
+            "https://api.openai.com:443/other",
+        ] {
+            assert_eq!(origin(same).as_deref(), Some("https://api.openai.com"));
+        }
+        for other in [
+            "https://attacker.example/v1",
+            "http://api.openai.com/v1",
+            "https://api.openai.com:8443/v1",
+            "https://api.openai.com.attacker.example/v1",
+        ] {
+            assert_ne!(origin(other).as_deref(), Some("https://api.openai.com"));
+        }
+        assert_eq!(
+            origin("http://127.0.0.1:8080/v1").as_deref(),
+            Some("http://127.0.0.1:8080")
+        );
+        assert_eq!(origin("not a url"), None);
+        assert_eq!(origin("file:///C:/key"), None);
+    }
 
     #[test]
     fn credentials_round_trip_and_delete() {
