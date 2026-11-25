@@ -47,7 +47,7 @@ const CANCEL: i32 = 2;
 const RECOVER: i32 = 3;
 /// Some editors, Windows 11 Notepad among them, read the most recently
 /// injected character when they process a keystroke, so a batch arrives as
-/// repeats of its last character. Typing one UTF-16 unit at a time with a short
+/// repeats of its last character. Typing one character at a time with a short
 /// pause lets each be consumed first; 1 ms was measured to be too short.
 const TYPING_INTERVAL: Duration = Duration::from_millis(10);
 /// Time for the target to read the clipboard after Ctrl+V before it is restored.
@@ -632,7 +632,8 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
         }
     }
     // Unicode events preserve the clipboard and do not synthesize Enter shortcuts.
-    for (typed, &unit) in units.iter().enumerate() {
+    let total = text.chars().count();
+    for (typed, c) in text.chars().enumerate() {
         let interrupted = if stopped.load(Ordering::Acquire) {
             Some("dictation disabled")
         } else if unsafe { GetAsyncKeyState(VK_ESCAPE as i32) } < 0 {
@@ -646,16 +647,27 @@ fn insert(text: &str, target: Target, stopped: &AtomicBool, method: Insertion) -
             if typed == 0 {
                 bail!("Insertion skipped: {reason}");
             }
-            bail!(
-                "Insertion stopped after {typed} of {} characters: {reason}",
-                units.len()
-            );
+            bail!("Insertion stopped after {typed} of {total} characters: {reason}");
         }
-        let events = [0, KEYEVENTF_KEYUP].map(|up| key_event(0, unit, KEYEVENTF_UNICODE | up));
-        send(&events)?;
+        let (events, len) = char_events(c);
+        send(&events[..len])?;
         thread::sleep(TYPING_INTERVAL);
     }
     Ok(())
+}
+
+/// Key down and up for each UTF-16 unit of `c`. Both halves of a surrogate
+/// pair go into one SendInput call, so an interruption or other input cannot
+/// split them and leave a lone high surrogate in the target.
+fn char_events(c: char) -> ([INPUT; 4], usize) {
+    let mut buffer = [0; 2];
+    let units = c.encode_utf16(&mut buffer);
+    let mut events = [key_event(0, 0, 0); 4];
+    for (index, &unit) in units.iter().enumerate() {
+        events[2 * index] = key_event(0, unit, KEYEVENTF_UNICODE);
+        events[2 * index + 1] = key_event(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP);
+    }
+    (events, units.len() * 2)
 }
 
 /// Prepare provider-controlled text for insertion. Line endings become `\n`,
@@ -778,5 +790,28 @@ mod tests {
         for text in ["a\u{0}b", "a\u{1B}[31mb", "a\u{7F}", "a\u{85}b"] {
             assert!(insertion_text(text).is_err(), "{text:?}");
         }
+    }
+
+    #[test]
+    fn char_events_keep_surrogate_pairs_in_one_batch() {
+        let keys = |c| {
+            let (events, len) = char_events(c);
+            events[..len]
+                .iter()
+                // SAFETY: char_events fills only the keyboard variant.
+                .map(|event| unsafe { (event.Anonymous.ki.wScan, event.Anonymous.ki.dwFlags) })
+                .collect::<Vec<_>>()
+        };
+        let up = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+        assert_eq!(keys('a'), [(0x61, KEYEVENTF_UNICODE), (0x61, up)]);
+        assert_eq!(
+            keys('\u{1F600}'),
+            [
+                (0xD83D, KEYEVENTF_UNICODE),
+                (0xD83D, up),
+                (0xDE00, KEYEVENTF_UNICODE),
+                (0xDE00, up),
+            ]
+        );
     }
 }
