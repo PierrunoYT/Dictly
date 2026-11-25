@@ -671,9 +671,10 @@ fn char_events(c: char) -> ([INPUT; 4], usize) {
 /// Prepare provider-controlled text for insertion. Line endings become `\n`,
 /// so a lone CR is never typed or pasted. Bidi embeddings, overrides, and
 /// isolates (U+202A–U+202E, U+2066–U+2069) and the zero-width characters
-/// U+200B, U+200C, U+2060, and U+FEFF are removed: they could reorder or hide
-/// inserted text. The zero-width joiner U+200D stays because emoji sequences
-/// need it. Any other control character except tab rejects the transcript.
+/// U+200B, U+2060, and U+FEFF are removed: they could reorder or hide
+/// inserted text. The zero-width joiner U+200D (emoji sequences) and
+/// non-joiner U+200C (Persian and Indic spelling) stay. Any other control
+/// character except tab rejects the transcript.
 fn insertion_text(text: &str) -> Result<String> {
     let mut output = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
@@ -686,7 +687,6 @@ fn insertion_text(text: &str) -> Result<String> {
             '\u{202A}'..='\u{202E}'
             | '\u{2066}'..='\u{2069}'
             | '\u{200B}'
-            | '\u{200C}'
             | '\u{2060}'
             | '\u{FEFF}' => {}
             '\n' | '\t' => output.push(c),
@@ -772,9 +772,10 @@ mod tests {
             "\u{202A}a\u{202B}b\u{202C}c\u{202D}d\u{202E}e\u{2066}f\u{2067}g\u{2068}h\u{2069}";
         assert_eq!(insertion_text(text).unwrap(), "abcdefgh");
         assert_eq!(
-            insertion_text("\u{FEFF}zero\u{200B}width\u{200C}chars\u{2060}").unwrap(),
-            "zerowidthchars"
+            insertion_text("\u{FEFF}zero\u{200B}width\u{2060}").unwrap(),
+            "zerowidth"
         );
+        assert_eq!(insertion_text("می\u{200C}خواهم").unwrap(), "می\u{200C}خواهم");
     }
 
     #[test]
