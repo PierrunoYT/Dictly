@@ -18,6 +18,12 @@ overlay = true
 # "type" keeps the clipboard untouched; "paste" is instant and restores it.
 insertion = "type"
 
+# Vercel AI Gateway (uses provider/model IDs):
+# base_url = "https://ai-gateway.vercel.sh/v1"
+# api_key_env = "AI_GATEWAY_API_KEY"
+# transcription_model = "openai/gpt-4o-mini-transcribe"
+# cleanup_model = "openai/gpt-4o-mini"
+
 # A local OpenAI-compatible server can be used instead:
 # base_url = "http://127.0.0.1:8080/v1"
 # api_key_env = "" # explicitly allow an unauthenticated local server

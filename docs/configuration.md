@@ -51,6 +51,18 @@ max_recording_seconds = 60
 
 Supply the key in the desktop window or through the [PowerShell prompt for CLI commands](usage.md#command-reference). Cleanup costs an additional request and may alter meaning. An unsuccessful, malformed, or empty cleanup response falls back to the original transcript and reports a warning with the cause, such as `HTTP 401 Unauthorized` or `Cleanup returned empty text`. No cleaned or raw transcript history is saved by live dictation.
 
+## Vercel AI Gateway
+
+```toml
+base_url = "https://ai-gateway.vercel.sh/v1"
+api_key_env = "AI_GATEWAY_API_KEY"
+transcription_model = "openai/gpt-4o-mini-transcribe"
+cleanup = true
+cleanup_model = "openai/gpt-4o-mini"
+```
+
+Use the gateway's `provider/model` IDs. The gateway has no multipart `audio/transcriptions` endpoint, so when `base_url` is on `ai-gateway.vercel.sh` Dictly sends speech to `https://ai-gateway.vercel.sh/v4/ai/transcription-model` instead (see the [contract](#required-provider-api-contract)). Cleanup uses the gateway's `chat/completions` unchanged. `language` and dictionary hints are passed as OpenAI options: OpenAI models use them, other providers such as `mistral/voxtral-mini-transcribe-3` ignore them.
+
 ## Local OpenAI-compatible provider
 
 Run a compatible server separately, then point the app at its API prefix. For example, **if** your server listens on loopback port 8080 and exposes a model named `whisper-1`:
@@ -71,11 +83,12 @@ Both APIs use the same `base_url` and credentials; separate speech and cleanup p
 | Operation | Request | Expected successful response |
 | --- | --- | --- |
 | Transcription | `POST {base_url}/audio/transcriptions`, multipart fields `file`, `model`, `response_format=json`; optional `language` and `prompt` | A 2xx JSON object containing a nonempty string `text` after trimming |
+| Transcription on Vercel AI Gateway | `POST https://ai-gateway.vercel.sh/v4/ai/transcription-model` with headers `ai-model-id`, `ai-gateway-protocol-version: 0.0.1`, and `ai-transcription-model-specification-version: 4`; JSON `audio` (base64), `mediaType` from the file extension, and optional `providerOptions.openai.language` and `.prompt` | Same as above |
 | Cleanup | `POST {base_url}/chat/completions`, JSON `model` and `messages` with editor instructions in the system message and dictated text in the user message | A 2xx JSON object whose first `choices` item has nonempty `message.content` after trimming |
 
 Replies larger than 1 MB (1,048,576 bytes) are rejected without being parsed: a failed transcription, or a failed cleanup that falls back to the original transcript.
 
-Live audio is mono signed 16-bit PCM WAV at 16 kHz. Dictly captures at 16 kHz when the microphone supports it. Otherwise it captures at the device's default rate and downsamples to 16 kHz before upload by averaging each output sample's span of input samples. Device rates at or below 16 kHz are uploaded unchanged. Audio is downmixed to mono either way. Files are uploaded with their filename and `application/octet-stream` content type. No streaming response or streaming dictation is requested.
+Live audio is mono signed 16-bit PCM WAV at 16 kHz. Dictly captures at 16 kHz when the microphone supports it. Otherwise it captures at the device's default rate and downsamples to 16 kHz before upload by averaging each output sample's span of input samples. Device rates at or below 16 kHz are uploaded unchanged. Audio is downmixed to mono either way. Files are uploaded with their filename and `application/octet-stream` content type, except on Vercel AI Gateway, which needs the media type of a known extension (`wav`, `mp3`, `m4a`, `mp4`, `ogg`, `opus`, `webm`, or `flac`). No streaming response or streaming dictation is requested.
 
 Dictly does not configure echo cancellation, noise suppression, or automatic gain control: those remain under Windows/device control. Existing files passed to `transcribe` are uploaded unchanged.
 

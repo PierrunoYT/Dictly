@@ -17,6 +17,7 @@ This is an independent implementation inspired by Wispr Flow's public behavior, 
 - Microphone picker; falls back to the first available microphone when Windows has no default.
 - In-memory mono WAV at 16 kHz (higher device rates are downsampled before upload).
 - OpenAI-compatible transcription with `gpt-4o-mini-transcribe` by default, language selection, and dictionary hints.
+- [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway) support: set the provider URL to `https://ai-gateway.vercel.sh/v1`.
 - Optional AI cleanup that also receives the dictionary and falls back to the original transcript on errors.
 - One automatic retry after rate limiting, a transient server error, or a failed connection.
 - Text insertion by paced typing (the clipboard is untouched) or optional pasting (the previous clipboard text is restored).
@@ -30,7 +31,7 @@ No tray app, installer, configurable shortcuts, or offline model is included. Se
 Use Windows 10/11 x64. [Build from source](#build-from-source) to get the current `target\release\dictly.exe`. If you have a ZIP containing this desktop build, extract it first. Older archives contain the console-only app. The executable is unsigned; use only a build you trust. No Rust installation or administrator privileges are required to run a prebuilt executable.
 
 1. Double-click **`dictly.exe`**. No terminal or command-line arguments are needed.
-2. Review the **Provider URL** and **Transcription model**. The defaults use OpenAI.
+2. Review the **Provider URL** and **Transcription model**. The defaults use OpenAI. For [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), enter `https://ai-gateway.vercel.sh/v1` and a model such as `openai/gpt-4o-mini-transcribe`.
 3. Paste your provider's key into **API key**. It is masked. Check **Remember this key on this PC** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can use the unchecked **Provider requires an API key** option.
 4. Optionally set a language such as `de` or `en`, enable AI cleanup, choose a microphone, or switch insertion to pasting.
 5. Click **Enable dictation**, wait for **Ready**, then focus a text field in another app and use the shortcuts below.
@@ -66,7 +67,7 @@ Double-click `target\release\dictly.exe` to open the desktop window. The `run`, 
 ## Documentation
 
 - [Usage, privacy, and troubleshooting](docs/usage.md)
-- [Configuration reference and local providers](docs/configuration.md)
+- [Configuration reference, Vercel AI Gateway, and local providers](docs/configuration.md)
 - [Development, tests, and Windows verification checklist](docs/development.md)
 - [Changelog](CHANGELOG.md)
 - [Example configuration](config.example.toml)
