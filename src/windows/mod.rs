@@ -95,15 +95,16 @@ impl Hotkeys {
         let mut keys = Self(vec![]);
         for (id, key) in [(TOGGLE, VK_SPACE), (CANCEL, VK_ESCAPE), (RECOVER, 0x56)] {
             // SAFETY: null HWND binds the hotkey to this thread's message queue.
+            let registered = unsafe {
+                RegisterHotKey(
+                    null_mut(),
+                    id,
+                    MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+                    key as u32,
+                )
+            };
             ensure!(
-                unsafe {
-                    RegisterHotKey(
-                        null_mut(),
-                        id,
-                        MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
-                        key as u32,
-                    )
-                } != 0,
+                registered != 0,
                 "Cannot register Ctrl+Alt+{}. Another app or instance may own this shortcut.",
                 match id {
                     TOGGLE => "Space",
@@ -775,7 +776,10 @@ mod tests {
             insertion_text("\u{FEFF}zero\u{200B}width\u{2060}").unwrap(),
             "zerowidth"
         );
-        assert_eq!(insertion_text("می\u{200C}خواهم").unwrap(), "می\u{200C}خواهم");
+        assert_eq!(
+            insertion_text("می\u{200C}خواهم").unwrap(),
+            "می\u{200C}خواهم"
+        );
     }
 
     #[test]

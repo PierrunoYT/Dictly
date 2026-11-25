@@ -6,6 +6,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Added
 
+- Continuous integration on GitHub Actions: `cargo fmt --check`, strict Clippy with and without `test-audio`, debug and release tests on Windows, and `cargo deny` / `cargo audit` with a committed `deny.toml`. Unsafe blocks without a `// SAFETY:` comment now fail the build.
 - Hold-to-talk: holding Ctrl+Alt+Space for at least half a second records until release. A quick tap still toggles recording.
 - Start, stop, cancel, and error sounds, plus an always-on-top status overlay that does not take focus or mouse input. Both can be turned off, and the overlay scales with display DPI.
 - Microphone picker in the window, a `microphone` setting, and a `dictly devices` command that lists input names.

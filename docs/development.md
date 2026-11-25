@@ -40,9 +40,15 @@ The output is `target/x86_64-pc-windows-gnu/release/dictly.exe`. The source repo
 
 ```sh
 cargo fmt --check
-cargo test --locked
 cargo clippy --all-targets --locked -- -D warnings
+cargo clippy --all-targets --locked --features test-audio -- -D warnings
+cargo test --locked
+cargo test --locked --release
+cargo deny check
+cargo audit
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs these on every push to `main` and every pull request: formatting, both Clippy runs, and tests in debug (so the standard library's undefined-behaviour checks run) and release on `windows-latest`, plus `cargo deny` and `cargo audit` on Linux. `deny.toml` holds the license allowlist, denies yanked crates and unknown sources, and lists the unmaintained-crate advisories that arrive only through egui or Linux-only dependencies. Both crate roots deny `unsafe_op_in_unsafe_fn` and `clippy::undocumented_unsafe_blocks`, so every `unsafe` block needs a `// SAFETY:` comment.
 
 From Linux, also check Windows-only code:
 

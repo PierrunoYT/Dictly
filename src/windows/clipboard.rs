@@ -187,10 +187,8 @@ pub fn restore(saved: Saved) -> Result<()> {
         Saved::Empty => {
             let _open = Open::new()?;
             // SAFETY: the clipboard is open.
-            ensure!(
-                unsafe { EmptyClipboard() } != 0,
-                "Cannot clear the clipboard"
-            );
+            let cleared = unsafe { EmptyClipboard() };
+            ensure!(cleared != 0, "Cannot clear the clipboard");
             Ok(())
         }
     }

@@ -1,4 +1,5 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
+#![deny(unsafe_op_in_unsafe_fn, clippy::undocumented_unsafe_blocks)]
 
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
@@ -39,6 +40,7 @@ fn main() -> ExitCode {
     // attach to the calling terminal without creating a new console window.
     #[cfg(windows)]
     if std::env::args_os().len() > 1 {
+        // SAFETY: AttachConsole takes no pointers; failure just leaves no console.
         unsafe {
             windows_sys::Win32::System::Console::AttachConsole(
                 windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS,
@@ -58,6 +60,7 @@ fn main() -> ExitCode {
                 };
                 let message: Vec<u16> = format!("{error:#}\0").encode_utf16().collect();
                 let title: Vec<u16> = "Dictly\0".encode_utf16().collect();
+                // SAFETY: both strings are NUL-terminated UTF-16 buffers that outlive the call.
                 unsafe {
                     MessageBoxW(
                         std::ptr::null_mut(),
