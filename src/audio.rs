@@ -61,3 +61,22 @@ pub fn encode_wav(samples: &[i16], sample_rate: u32) -> Result<Vec<u8>> {
     }
     Ok(bytes.into_inner())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn longest_high_rate_recording_fits_the_upload_cap_after_downsampling() {
+        // 120 s at 192 kHz is about 46 MB of 16-bit samples before downsampling.
+        // A 1 kHz square wave survives the averaging downsampler.
+        let samples: Vec<i16> = (0..192_000 * 120)
+            .map(|index| if (index / 96) % 2 == 0 { 1_000 } else { -1_000 })
+            .collect();
+        let (downsampled, rate) = downsample(&samples, 192_000);
+        assert_eq!(rate, SPEECH_RATE);
+        assert_eq!(downsampled.len(), 16_000 * 120);
+        let wav = encode_wav(&downsampled, rate).unwrap();
+        assert_eq!(wav.len(), 16_000 * 120 * 2 + 44);
+    }
+}

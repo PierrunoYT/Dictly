@@ -39,7 +39,7 @@ Minimize the window to keep dictation enabled. Closing it exits the app, stops c
 
 For longer dictation, tap the shortcut instead: a press shorter than half a second keeps recording hands-free until you press it again. Turn off sounds or the status pill in the window, or with `sounds` and `overlay` in `config.toml`. The pill never takes focus or mouse clicks. Shortcuts are fixed in this version. Ctrl+Alt combinations may overlap with AltGr on some keyboard layouts.
 
-Recording stops and proceeds to transcription automatically at the configured duration (120 seconds by default), or when its audio buffer reaches the size cap just below 24 MB. Recordings under 200 ms and effectively silent input are rejected. A microphone error discards the recording.
+Recording stops and proceeds to transcription automatically at the configured duration (120 seconds by default). Audio above 16 kHz is downsampled to 16 kHz before upload, so the longest recording is under 4 MB, well below the 24 MB upload cap. Recordings under 200 ms and effectively silent input are rejected. A microphone error discards the recording.
 
 ### Cancel or recover text
 

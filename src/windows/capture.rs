@@ -1,4 +1,4 @@
-use crate::audio::{MAX_AUDIO_BYTES, downsample, encode_wav};
+use crate::audio::{downsample, encode_wav};
 use anyhow::{Context, Result, bail, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{
@@ -80,9 +80,10 @@ impl Capture {
             config.channels > 0 && config.sample_rate.0 > 0,
             "Invalid microphone format"
         );
-        let limit =
-            (config.sample_rate.0 as usize * seconds as usize).min((MAX_AUDIO_BYTES - 44) / 2 - 1);
-        let samples = Arc::new(Mutex::new(Vec::with_capacity(limit)));
+        // Bound by duration only: the 24 MB upload cap applies to the 16 kHz
+        // output, which encode_wav checks after downsampling.
+        let limit = config.sample_rate.0 as usize * seconds as usize;
+        let samples = Arc::new(Mutex::new(Vec::new()));
         let failed = Arc::new(AtomicBool::new(false));
         let full = Arc::new(AtomicBool::new(false));
         let stream = match supported.sample_format() {
@@ -214,7 +215,17 @@ where
                 return;
             };
             let remaining = limit - samples.len();
-            for frame in data.chunks_exact(channels).take(remaining) {
+            let frames = (data.len() / channels).min(remaining);
+            if samples.capacity() - samples.len() < frames {
+                // Grow geometrically but never past the limit, so a short
+                // recording stays small and a long one does not overshoot.
+                let capacity = (samples.capacity() * 2)
+                    .max(samples.len() + frames)
+                    .min(limit);
+                let additional = capacity - samples.len();
+                samples.reserve_exact(additional);
+            }
+            for frame in data.chunks_exact(channels).take(frames) {
                 let mono = frame
                     .iter()
                     .map(|&sample| sample.to_sample::<f32>())
