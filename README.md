@@ -2,10 +2,6 @@
 
 <h1 align="center">SpeakCraft</h1>
 
-<p align="center">Part of <a href="https://github.com/freewright-dev">Freewright</a></p>
-
-<p align="center"><a href="https://discord.gg/SAy3t4BvJj"><img src="https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white" alt="Join the Freewright Discord"></a></p>
-
 **Speak, then insert text where you work.** SpeakCraft is a Windows desktop dictation app built with Rust. Double-click `speakcraft.exe` to configure your provider and enable dictation. Hold a global shortcut while you speak, or tap it to start and stop, and SpeakCraft inserts the transcript into the focused application. Optional AI cleanup asks the model to remove fillers and handle spoken corrections.
 
 **Status: 0.1.0 MVP with unreleased desktop UI.** The native Windows x64 build, 12 contract tests, and 2 Windows unit tests pass. A [Windows end-to-end harness](docs/development.md#windows-end-to-end-harness) drives the real executable with global shortcuts. It passed 13 scenarios, including insertion into Notepad and one dictation through OpenAI. Live microphone capture is still unverified, because the test machine had no connected microphone; the harness replayed recorded audio instead. No new public release or installer has been published.
