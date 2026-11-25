@@ -1,20 +1,24 @@
 # Changelog
 
-User-visible changes to SpeakCraft. Versions match `Cargo.toml`. Local build entries do not imply a published release, signed installer, or completed Windows desktop verification.
+User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries do not imply a published release, signed installer, or completed Windows desktop verification.
 
 ## Unreleased
+
+### Changed
+
+- Renamed the app from SpeakCraft to Dictly: the executable is now `dictly.exe`, the crate is `dictly`, and test variables use the `DICTLY_` prefix. An API key saved in Windows Credential Manager under the old name must be saved again.
 
 ### Added
 
 - Hold-to-talk: holding Ctrl+Alt+Space for at least half a second records until release. A quick tap still toggles recording.
 - Start, stop, cancel, and error sounds, plus an always-on-top status overlay that does not take focus or mouse input. Both can be turned off, and the overlay scales with display DPI.
-- Microphone picker in the window, a `microphone` setting, and a `speakcraft devices` command that lists input names.
+- Microphone picker in the window, a `microphone` setting, and a `dictly devices` command that lists input names.
 - Settings are saved to `config.toml` when dictation is enabled from the window. An optional checkbox stores the API key in Windows Credential Manager instead of the file.
 - Optional paste insertion (`insertion = "paste"`). It marks dictated clipboard text to be skipped by clipboard history and cloud sync, and restores the previous clipboard text. It types instead when the clipboard holds anything other than plain text.
 - One automatic transcription retry after HTTP 429, 500, 502, 503, or 504, or a failed connection. It honors `Retry-After` up to 5 seconds.
 - Single-instance guard with a clear "already running" message.
 - Windows end-to-end harness (`scripts/windows_e2e.py`) and a `test-audio` Cargo feature that replays a WAV file in place of the microphone, for testing only.
-- Windows desktop window opened by double-clicking `speakcraft.exe`, with provider/model/language settings, optional cleanup, enable/disable controls, and visible status/errors.
+- Windows desktop window opened by double-clicking `dictly.exe`, with provider/model/language settings, optional cleanup, enable/disable controls, and visible status/errors.
 - Masked session-only API-key entry without storing keys on disk or changing the process environment.
 - Automatic loading of `config.toml` beside the executable for desktop launch; explicit `--config` overrides it. CLI configuration loading is unchanged.
 - Desktop interaction tests for setup errors and service restart, plus session-credential and CLI compatibility contract tests.
@@ -24,23 +28,23 @@ User-visible changes to SpeakCraft. Versions match `Cargo.toml`. Local build ent
 
 ### Changed
 
-- SpeakCraft is now licensed under GPL-3.0-or-later (previously MIT), matching the other Freewright projects.
+- Dictly is now licensed under GPL-3.0-or-later (previously MIT), matching the other Freewright projects.
 - The default transcription model is now `gpt-4o-mini-transcribe` (previously `whisper-1`). In a live comparison it resolved a spoken self-correction that `whisper-1` turned into an invented date after cleanup. Set `transcription_model = "whisper-1"` to keep the old model.
 - Recordings above 16 kHz are downsampled to 16 kHz before upload, which cuts the upload to a third for 48 kHz microphones.
 - AI cleanup receives the dictionary terms so their spelling survives editing.
 - Canceling, disabling, or closing during processing now also skips any pending retry and the optional cleanup request.
 - Without a Windows default input device, recording uses the first available microphone instead of failing.
 - Launching without a subcommand opens the desktop UI instead of printing help and exiting. CLI `run`, `transcribe`, `check`, help, and version remain available.
-- Minimize keeps dictation enabled; disabling or closing releases shortcuts and discards pending insertion and retained text. SpeakCraft's own settings window is excluded from dictation targets.
-- Renamed the app to SpeakCraft; the Rust package and executable are now `speakcraft` and `speakcraft.exe` on Windows. Existing configuration files, environment-variable names, and dictation shortcuts remain compatible. Update launch commands to the new executable path.
+- Minimize keeps dictation enabled; disabling or closing releases shortcuts and discards pending insertion and retained text. Dictly's own settings window is excluded from dictation targets.
+- Renamed the app to Dictly; the Rust package and executable are now `dictly` and `dictly.exe` on Windows. Existing configuration files, environment-variable names, and dictation shortcuts remain compatible. Update launch commands to the new executable path.
 - Reorganized the README around Windows quick start, features, build instructions, and links to detailed documentation.
-- Documented the difference between the original archive and the local SpeakCraft build, upgrade steps, file-transcription usage, and unchanged configuration behavior.
+- Documented the difference between the original archive and the local Dictly build, upgrade steps, file-transcription usage, and unchanged configuration behavior.
 - Made the MVP status, API costs, cloud data flow, and unverified Windows desktop behavior explicit.
 - Capture now requests 16 kHz mono when the microphone offers it, falling back to the device default sample rate otherwise. Fallback audio is downmixed to mono without local resampling; provider sample-rate support determines compatibility. Echo cancellation, noise suppression, and auto gain remain at the Windows defaults.
 
 ### Fixed
 
-- Typed insertion into Windows 11 Notepad arrived as one character repeated, such as `plain ssss…`, because Notepad reads the most recent injected character when it processes each keystroke. SpeakCraft now types one character at a time, about 100 per second, and stops cleanly if focus changes or Esc is pressed mid-insertion.
+- Typed insertion into Windows 11 Notepad arrived as one character repeated, such as `plain ssss…`, because Notepad reads the most recent injected character when it processes each keystroke. Dictly now types one character at a time, about 100 per second, and stops cleanly if focus changes or Esc is pressed mid-insertion.
 - Updated `rustls-webpki` to 0.103.17 and `webpki-roots` to 1.0.12 for TLS certificate-verification advisories RUSTSEC-2026-0382 and RUSTSEC-2026-0381, and replaced the yanked `clipboard-win` 5.4.1 with 5.4.3.
 - The desktop window no longer overwrites a configuration file it failed to load. Previously one typo made **Enable dictation** replace the file with defaults, losing the dictionary and recording limit and switching a local provider URL to OpenAI. The defaults now apply to that session only, and the window says the file was left unchanged.
 - Plain-HTTP loopback providers are no longer reached through `HTTP_PROXY` or `ALL_PROXY` from the environment. Previously a configured proxy received the audio, the API key, and the transcript in cleartext, and could return any text to be typed. HTTPS providers still honor proxy variables.

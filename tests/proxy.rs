@@ -1,6 +1,6 @@
 //! Its own test binary: it sets proxy variables for the whole process.
 
-use speakcraft::{config::Config, pipeline::Pipeline};
+use dictly::{config::Config, pipeline::Pipeline};
 use std::time::Duration;
 use tiny_http::{Response, Server};
 

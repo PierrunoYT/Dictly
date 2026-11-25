@@ -33,7 +33,7 @@ fn select_device(name: Option<&str>) -> Result<cpal::Device> {
             .input_devices()?
             .find(|device| device.name().is_ok_and(|device| device == name))
             .with_context(|| {
-                format!("Microphone \"{name}\" is not connected. Choose another in SpeakCraft or Windows Sound settings.")
+                format!("Microphone \"{name}\" is not connected. Choose another in Dictly or Windows Sound settings.")
             });
     }
     host.default_input_device()
@@ -44,7 +44,7 @@ fn select_device(name: Option<&str>) -> Result<cpal::Device> {
 impl Capture {
     pub fn start(seconds: u32, microphone: Option<&str>) -> Result<Self> {
         #[cfg(feature = "test-audio")]
-        if let Some(path) = std::env::var_os("SPEAKCRAFT_TEST_AUDIO") {
+        if let Some(path) = std::env::var_os("DICTLY_TEST_AUDIO") {
             return Self::from_file(path.as_ref(), seconds);
         }
         let device = select_device(microphone)?;
@@ -113,11 +113,11 @@ impl Capture {
     #[cfg(feature = "test-audio")]
     fn from_file(path: &std::path::Path, seconds: u32) -> Result<Self> {
         let mut reader =
-            hound::WavReader::open(path).context("Cannot open SPEAKCRAFT_TEST_AUDIO")?;
+            hound::WavReader::open(path).context("Cannot open DICTLY_TEST_AUDIO")?;
         let spec = reader.spec();
         ensure!(
             spec.channels > 0 && spec.bits_per_sample == 16,
-            "SPEAKCRAFT_TEST_AUDIO must be 16-bit PCM"
+            "DICTLY_TEST_AUDIO must be 16-bit PCM"
         );
         let interleaved = reader.samples::<i16>().collect::<Result<Vec<_>, _>>()?;
         let limit = spec.sample_rate as usize * seconds as usize;

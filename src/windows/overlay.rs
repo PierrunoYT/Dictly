@@ -51,7 +51,7 @@ pub struct Overlay(HWND);
 
 impl Overlay {
     pub fn new() -> Result<Self> {
-        let class = wide("SpeakCraftOverlay");
+        let class = wide("DictlyOverlay");
         // SAFETY: class and window parameters are valid for the calls; the
         // class name outlives registration and creation.
         unsafe {

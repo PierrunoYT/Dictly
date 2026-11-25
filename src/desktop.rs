@@ -28,13 +28,13 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
     let saved_key = windows::credential::load();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("SpeakCraft")
+            .with_title("Dictly")
             .with_inner_size([620.0, 820.0])
             .with_min_inner_size([440.0, 540.0]),
         ..Default::default()
     };
     eframe::run_native(
-        "SpeakCraft",
+        "Dictly",
         options,
         Box::new(move |cc| {
             Ok(Box::new(Desktop::new(
@@ -46,7 +46,7 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
             )))
         }),
     )
-    .map_err(|error| anyhow::anyhow!("Cannot open SpeakCraft desktop window: {error}"))
+    .map_err(|error| anyhow::anyhow!("Cannot open Dictly desktop window: {error}"))
 }
 
 enum Event {
@@ -116,7 +116,7 @@ impl Desktop {
             Err(error) => (
                 Config::default(),
                 Some(format!(
-                    "Could not load configuration: {error:#}. Defaults are shown for this session only; fix or remove the file, then restart SpeakCraft to save settings."
+                    "Could not load configuration: {error:#}. Defaults are shown for this session only; fix or remove the file, then restart Dictly to save settings."
                 )),
             ),
         };
@@ -291,7 +291,7 @@ impl eframe::App for Desktop {
             .frame(egui::Frame::new().fill(Color32::from_rgb(248, 250, 253)).inner_margin(24.0))
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading(RichText::new("SpeakCraft").size(32.0).strong());
+                    ui.heading(RichText::new("Dictly").size(32.0).strong());
                     ui.label("Your voice, wherever you type.");
                     ui.add_space(8.0);
                     egui::Frame::group(ui.style()).fill(Color32::WHITE).show(ui, |ui| {
@@ -457,7 +457,7 @@ mod tests {
         let _exclusive = exclusive();
         let config = Config {
             base_url: "http://127.0.0.1:9/v1".into(),
-            api_key_env: "SPEAKCRAFT_TEST_MISSING_CREDENTIAL".into(),
+            api_key_env: "DICTLY_TEST_MISSING_CREDENTIAL".into(),
             ..Config::default()
         };
         let mut harness = Harness::builder()
@@ -471,7 +471,7 @@ mod tests {
             "Dictation disabled. No new audio will be recorded or inserted.",
         );
         harness.get_by_label_contains(
-            "Set the SPEAKCRAFT_TEST_MISSING_CREDENTIAL environment variable",
+            "Set the DICTLY_TEST_MISSING_CREDENTIAL environment variable",
         );
         wait_for(&mut harness, "Enable dictation");
 
@@ -533,7 +533,7 @@ mod tests {
     fn enabling_after_a_failed_load_never_overwrites_the_configuration_file() {
         let _exclusive = exclusive();
         let directory =
-            std::env::temp_dir().join(format!("speakcraft-unloadable-{}", std::process::id()));
+            std::env::temp_dir().join(format!("dictly-unloadable-{}", std::process::id()));
         std::fs::create_dir_all(&directory).unwrap();
         let path = directory.join("config.toml");
         let original =

@@ -1,4 +1,4 @@
-use speakcraft::{
+use dictly::{
     audio::{downsample, encode_wav},
     config::{Config, Insertion},
     pipeline::Pipeline,
@@ -70,7 +70,7 @@ fn session_credentials_authenticate_without_an_environment_variable() {
     let server = Server::http("127.0.0.1:0").unwrap();
     let config = Config {
         base_url: format!("http://{}/v1", server.server_addr()),
-        api_key_env: "SPEAKCRAFT_TEST_MISSING_CREDENTIAL".into(),
+        api_key_env: "DICTLY_TEST_MISSING_CREDENTIAL".into(),
         ..Config::default()
     };
     assert!(Pipeline::with_api_key(config.clone(), None).is_err());
@@ -100,7 +100,7 @@ fn session_credentials_authenticate_without_an_environment_variable() {
 
 #[test]
 fn cli_commands_keep_output_and_exit_codes_with_the_desktop_executable() {
-    let version = format!("speakcraft {}", env!("CARGO_PKG_VERSION"));
+    let version = format!("dictly {}", env!("CARGO_PKG_VERSION"));
     for (args, expected) in [
         (vec!["--version"], version.as_str()),
         (vec!["--help"], "transcribe"),
@@ -109,7 +109,7 @@ fn cli_commands_keep_output_and_exit_codes_with_the_desktop_executable() {
             "Configuration valid.",
         ),
     ] {
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_speakcraft"))
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_dictly"))
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env_remove("OPENAI_API_KEY")
             .args(args)
@@ -122,7 +122,7 @@ fn cli_commands_keep_output_and_exit_codes_with_the_desktop_executable() {
             output
         );
     }
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_speakcraft"))
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_dictly"))
         .arg("not-a-command")
         .output()
         .unwrap();
@@ -244,7 +244,7 @@ fn cleanup_returns_edited_text_and_sends_dictation_as_data() {
         ),
     ]);
     config.cleanup = true;
-    config.dictionary = vec!["Zürich".into(), "SpeakCraft".into()];
+    config.dictionary = vec!["Zürich".into(), "Dictly".into()];
     let result = Pipeline::new(config)
         .unwrap()
         .transcribe(wav(), "voice.wav")
@@ -255,7 +255,7 @@ fn cleanup_returns_edited_text_and_sends_dictation_as_data() {
     assert_eq!(requests[1].0, "/v1/chat/completions");
     let body: serde_json::Value = serde_json::from_slice(&requests[1].1).unwrap();
     assert!(body["messages"][0]["content"].as_str().unwrap().ends_with(
-        "Spell these names and terms exactly as written when they occur: Zürich, SpeakCraft."
+        "Spell these names and terms exactly as written when they occur: Zürich, Dictly."
     ));
     assert_eq!(body["messages"][1]["role"], "user");
     assert_eq!(
@@ -426,7 +426,7 @@ fn downsampling_averages_to_16_khz_and_keeps_lower_rates() {
 #[test]
 fn settings_round_trip_through_a_saved_file_and_old_files_still_load() {
     let directory =
-        std::env::temp_dir().join(format!("speakcraft-settings-{}", std::process::id()));
+        std::env::temp_dir().join(format!("dictly-settings-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("config.toml");
     let config = Config {

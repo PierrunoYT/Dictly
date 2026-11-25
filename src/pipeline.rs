@@ -118,7 +118,7 @@ impl Pipeline {
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_nanos() as u64);
         let boundary = (0u64..)
-            .map(|attempt| format!("speakcraft-{:016x}", seed.wrapping_add(attempt)))
+            .map(|attempt| format!("dictly-{:016x}", seed.wrapping_add(attempt)))
             .find(|boundary| {
                 let bytes = boundary.as_bytes();
                 !audio.windows(bytes.len()).any(|window| window == bytes)

@@ -60,23 +60,23 @@ pub(crate) fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(Some(0)).collect()
 }
 
-/// One SpeakCraft per user session: two would compete for the same shortcuts.
+/// One Dictly per user session: two would compete for the same shortcuts.
 pub struct SingleInstance(HANDLE);
 
 impl SingleInstance {
     pub fn acquire() -> Result<Self> {
-        let name = wide("Local\\SpeakCraft.SingleInstance");
+        let name = wide("Local\\Dictly.SingleInstance");
         // SAFETY: name is NUL-terminated; the handle is closed on drop or below.
         unsafe {
             let handle = CreateMutexW(std::ptr::null(), 0, name.as_ptr());
             ensure!(
                 !handle.is_null(),
-                "Cannot check for another running SpeakCraft"
+                "Cannot check for another running Dictly"
             );
             if GetLastError() == ERROR_ALREADY_EXISTS {
                 CloseHandle(handle);
                 bail!(
-                    "SpeakCraft is already running. Use the open SpeakCraft window or close it first."
+                    "Dictly is already running. Use the open Dictly window or close it first."
                 );
             }
             Ok(Self(handle))
@@ -149,7 +149,7 @@ impl Target {
             }
             let mut process_id = 0;
             let tid = GetWindowThreadProcessId(window, &mut process_id);
-            // Never record for or insert into SpeakCraft's own settings/API-key fields.
+            // Never record for or insert into Dictly's own settings/API-key fields.
             if process_id == GetCurrentProcessId() {
                 return None;
             }
@@ -287,7 +287,7 @@ pub(crate) fn run_controlled(
     let mut recovery: Option<String> = None;
     let mut feedback = Feedback::new(&config, &report);
     report(
-        "SpeakCraft — Ctrl+Alt+Space: hold to talk, or tap to start/stop; Ctrl+Alt+Esc: cancel/clear; Ctrl+Alt+V: insert retained text.",
+        "Dictly — Ctrl+Alt+Space: hold to talk, or tap to start/stop; Ctrl+Alt+Esc: cancel/clear; Ctrl+Alt+V: insert retained text.",
     );
     report(&format!(
         "Audio is sent to {}. Cleanup: {}.",
