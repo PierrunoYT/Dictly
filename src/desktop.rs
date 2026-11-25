@@ -13,8 +13,12 @@ use std::{
         mpsc,
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+/// How long closing the window waits for the worker to stop. A paste in
+/// progress restores the previous clipboard text within about 0.4 s.
+const SHUTDOWN_WAIT: Duration = Duration::from_secs(1);
 
 pub fn run(config_path: Option<PathBuf>) -> Result<()> {
     let _instance = windows::SingleInstance::acquire()?;
@@ -310,8 +314,20 @@ impl Desktop {
 }
 
 impl Drop for Desktop {
+    /// Closing the window stops the worker and waits briefly so an insertion
+    /// in progress can finish restoring the clipboard before the process exits.
+    /// A request still waiting on the provider is abandoned after the wait.
     fn drop(&mut self) {
         self.stop();
+        if let Some(worker) = self.worker.take() {
+            let deadline = Instant::now() + SHUTDOWN_WAIT;
+            while !worker.thread.is_finished() && Instant::now() < deadline {
+                thread::sleep(Duration::from_millis(10));
+            }
+            if worker.thread.is_finished() {
+                let _ = worker.thread.join();
+            }
+        }
     }
 }
 
@@ -651,5 +667,35 @@ mod tests {
             "https://attacker.example/v1"
         );
         assert!(harness.state().api_key.is_empty());
+    }
+
+    #[test]
+    fn closing_waits_for_the_worker_to_finish_restoring_the_clipboard() {
+        let _exclusive = exclusive();
+        let mut harness = Harness::builder()
+            .with_size([620.0, 820.0])
+            .build_eframe(|cc| {
+                Desktop::new(Ok(Config::default()), None, None, Ok(None), &cc.egui_ctx)
+            });
+        harness.run();
+        // Stands in for a paste that keeps running for its 400 ms settle after
+        // the stop request, then restores the clipboard.
+        let stop = Arc::new(AtomicBool::new(false));
+        let restored = Arc::new(AtomicBool::new(false));
+        let (signal, done) = (Arc::clone(&stop), Arc::clone(&restored));
+        let (_tx, events) = mpsc::channel();
+        harness.state_mut().worker = Some(Worker {
+            stop,
+            events,
+            thread: thread::spawn(move || {
+                while !signal.load(Ordering::Acquire) {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                thread::sleep(Duration::from_millis(400));
+                done.store(true, Ordering::Release);
+            }),
+        });
+        drop(harness);
+        assert!(restored.load(Ordering::Acquire));
     }
 }

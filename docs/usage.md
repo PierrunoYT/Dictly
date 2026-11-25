@@ -27,7 +27,7 @@ In Windows settings:
 - **Windows 10:** Privacy → Microphone → allow microphone access and desktop app access.
 - **Both:** choose a microphone in Dictly's **Microphone** list, or keep **Windows default** and select the input in Sound settings. If Windows reports no default input, Dictly uses the first available microphone. Click **Refresh** after connecting a device.
 
-Minimize the window to keep dictation enabled. Closing it exits the app, stops capture, and discards pending insertion and retained text. **Disable dictation** does the same without closing the window and releases the global shortcuts. An API request already sent may finish in the background, but its result is not inserted. Only one Dictly (window or `run`) can be open at a time. No tray icon is installed.
+Minimize the window to keep dictation enabled. Closing it exits the app, stops capture, and discards pending insertion and retained text; if a paste is in progress, Dictly waits up to one second for it to restore your previous clipboard text before exiting. Ctrl+C or closing the console stops `dictly run` the same way. **Disable dictation** does the same without closing the window and releases the global shortcuts. An API request already sent may finish in the background, but its result is not inserted. Only one Dictly (window or `run`) can be open at a time. No tray icon is installed.
 
 ## Dictate into an application
 

@@ -260,6 +260,23 @@ fn shortcut_held() -> bool {
         .all(|&key| unsafe { GetAsyncKeyState(key as i32) } < 0)
 }
 
+/// Set by Ctrl+C, Ctrl+Break, or closing the console; stops console `run` the
+/// way **Disable dictation** stops the desktop worker.
+static CONSOLE_STOP: AtomicBool = AtomicBool::new(false);
+/// Set once console `run` has returned.
+static CONSOLE_STOPPED: AtomicBool = AtomicBool::new(false);
+
+extern "system" fn console_control(_event: u32) -> windows_sys::Win32::Foundation::BOOL {
+    CONSOLE_STOP.store(true, Ordering::Release);
+    // Windows ends the process when this returns for a closed console, logoff,
+    // or shutdown. Wait briefly so a paste in progress restores the clipboard.
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while !CONSOLE_STOPPED.load(Ordering::Acquire) && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    windows_sys::Win32::Foundation::TRUE
+}
+
 pub fn run(config: Config) -> Result<()> {
     let _instance = SingleInstance::acquire()?;
     // The desktop window gets this from winit; the CLI sets it so the overlay
@@ -269,9 +286,15 @@ pub fn run(config: Config) -> Result<()> {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     }
     let pipeline = Pipeline::new(config.clone())?;
-    run_controlled(config, pipeline, &AtomicBool::new(false), |message| {
+    // SAFETY: console_control is a valid handler for the life of the process.
+    unsafe {
+        windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(console_control), 1);
+    }
+    let result = run_controlled(config, pipeline, &CONSOLE_STOP, |message| {
         eprintln!("{message}");
-    })
+    });
+    CONSOLE_STOPPED.store(true, Ordering::Release);
+    result
 }
 
 pub(crate) fn run_controlled(
