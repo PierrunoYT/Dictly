@@ -605,6 +605,10 @@ mod tests {
             });
         harness.run();
         harness.get_by_label_contains("it is left unchanged");
+        assert!(
+            harness.query_by_label_contains("Loaded ").is_none(),
+            "a file that failed to load must not be reported as loaded"
+        );
         harness
             .get_by_role_and_label(Role::PasswordInput, "API key")
             .click();
