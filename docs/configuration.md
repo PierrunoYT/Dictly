@@ -73,6 +73,8 @@ Both APIs use the same `base_url` and credentials; separate speech and cleanup p
 | Transcription | `POST {base_url}/audio/transcriptions`, multipart fields `file`, `model`, `response_format=json`; optional `language` and `prompt` | A 2xx JSON object containing a nonempty string `text` after trimming |
 | Cleanup | `POST {base_url}/chat/completions`, JSON `model` and `messages` with editor instructions in the system message and dictated text in the user message | A 2xx JSON object whose first `choices` item has nonempty `message.content` after trimming |
 
+Replies larger than 1 MB (1,048,576 bytes) are rejected without being parsed: a failed transcription, or a failed cleanup that falls back to the original transcript.
+
 Live audio is mono signed 16-bit PCM WAV at 16 kHz. Dictly captures at 16 kHz when the microphone supports it. Otherwise it captures at the device's default rate and downsamples to 16 kHz before upload by averaging each output sample's span of input samples. Device rates at or below 16 kHz are uploaded unchanged. Audio is downmixed to mono either way. Files are uploaded with their filename and `application/octet-stream` content type. No streaming response or streaming dictation is requested.
 
 Dictly does not configure echo cancellation, noise suppression, or automatic gain control: those remain under Windows/device control. Existing files passed to `transcribe` are uploaded unchanged.

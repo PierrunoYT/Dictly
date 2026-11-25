@@ -306,6 +306,50 @@ fn transcription_rejects_errors_redirects_and_empty_or_malformed_responses() {
 }
 
 #[test]
+fn oversized_provider_responses_are_rejected_before_parsing() {
+    // Valid JSON just over 1 MB, so only the size cap can reject it.
+    let filler = "a".repeat(1 << 20);
+    let transcription = format!(r#"{{"text":"{filler}"}}"#);
+    let completion = format!(r#"{{"choices":[{{"message":{{"content":"{filler}"}}}}]}}"#);
+    for (cleanup, replies) in [
+        (false, vec![transcription]),
+        (true, vec![r#"{"text":"Original."}"#.to_owned(), completion]),
+    ] {
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let config = Config {
+            base_url: format!("http://{}/v1", server.server_addr()),
+            api_key_env: String::new(),
+            cleanup,
+            ..Config::default()
+        };
+        let worker = thread::spawn(move || {
+            for reply in replies {
+                let mut request = server
+                    .recv_timeout(Duration::from_secs(5))
+                    .unwrap()
+                    .expect("API request");
+                let mut bytes = vec![];
+                request.as_reader().read_to_end(&mut bytes).unwrap();
+                // The client stops reading at the cap and may close the connection mid-reply.
+                let _ = request.respond(Response::from_string(reply));
+            }
+        });
+        let result = Pipeline::new(config)
+            .unwrap()
+            .transcribe(wav(), "voice.wav");
+        if cleanup {
+            let transcript = result.unwrap();
+            assert_eq!(transcript.text, "Original.");
+            assert!(transcript.cleanup_failed);
+        } else {
+            let error = format!("{:#}", result.err().expect("oversized transcription"));
+            assert!(error.contains("exceeds 1 MB"), "{error}");
+        }
+        worker.join().unwrap();
+    }
+}
+
+#[test]
 fn transient_failures_are_retried_once_and_client_errors_are_not() {
     let (config, server) = provider(vec![(503, "busy"), (200, r#"{"text":"Second attempt."}"#)]);
     let result = Pipeline::new(config)
@@ -425,8 +469,7 @@ fn downsampling_averages_to_16_khz_and_keeps_lower_rates() {
 
 #[test]
 fn settings_round_trip_through_a_saved_file_and_old_files_still_load() {
-    let directory =
-        std::env::temp_dir().join(format!("dictly-settings-{}", std::process::id()));
+    let directory = std::env::temp_dir().join(format!("dictly-settings-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     let path = directory.join("config.toml");
     let config = Config {

@@ -1,9 +1,10 @@
 use crate::{audio::MAX_AUDIO_BYTES, config::Config};
 use anyhow::{Context, Result, ensure};
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 use std::{
+    io::Read,
     sync::atomic::{AtomicBool, Ordering},
     thread,
     time::Duration,
@@ -13,6 +14,8 @@ const EDITOR_PROMPT: &str = "You are a dictation editor. Return only the edited 
 /// Delay before the single retry when the provider gives no usable Retry-After.
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_RETRY_DELAY: Duration = Duration::from_secs(5);
+/// Largest provider reply accepted; a transcript this long could never be inserted.
+const MAX_RESPONSE_BYTES: u64 = 1 << 20;
 
 pub struct Pipeline {
     config: Config,
@@ -204,9 +207,8 @@ impl Pipeline {
             "Speech provider returned HTTP {}",
             response.status()
         );
-        let result: Transcription = response
-            .json()
-            .context("Speech provider returned invalid JSON")?;
+        let result: Transcription =
+            read_json(response).context("Invalid speech provider response")?;
         let text = result.text.trim().to_owned();
         ensure!(!text.is_empty(), "No speech recognized");
         if !self.config.cleanup || canceled.load(Ordering::Acquire) {
@@ -250,7 +252,7 @@ impl Pipeline {
             "Cleanup provider returned HTTP {}",
             response.status()
         );
-        let result: Completion = response.json()?;
+        let result: Completion = read_json(response)?;
         let text = result
             .choices
             .into_iter()
@@ -272,4 +274,18 @@ fn retry_delay(response: &Response) -> Duration {
         .map_or(RETRY_DELAY, |seconds| {
             Duration::from_secs(seconds).min(MAX_RETRY_DELAY)
         })
+}
+
+/// Parse a provider reply without buffering more than `MAX_RESPONSE_BYTES`.
+fn read_json<T: DeserializeOwned>(response: Response) -> Result<T> {
+    let mut body = Vec::new();
+    response
+        .take(MAX_RESPONSE_BYTES + 1)
+        .read_to_end(&mut body)
+        .context("Cannot read provider response")?;
+    ensure!(
+        body.len() as u64 <= MAX_RESPONSE_BYTES,
+        "Provider response exceeds 1 MB"
+    );
+    serde_json::from_slice(&body).context("Provider returned invalid JSON")
 }
