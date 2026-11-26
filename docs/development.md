@@ -102,7 +102,7 @@ Scenarios: tap-to-toggle with Unicode text, 16 kHz upload, and an unchanged clip
 
 The `test-audio` feature makes `DICTLY_TEST_AUDIO=<file.wav>` replace the microphone. It exercises everything except device capture. Use a separate `--target-dir` as shown, and never ship a build that has it enabled. Generate test speech with Windows TTS, for example `System.Speech.Synthesis.SpeechSynthesizer.SetOutputToWaveFile` with a 16-bit mono format.
 
-On 2026-10-16 all 13 scenarios passed with replayed audio and `--live`. The test machine had no active capture device, so live microphone capture is still unverified.
+On 2026-10-16 all 13 scenarios passed with replayed audio and `--live`. On 2026-11-26 they passed again after the overlay redesign, with Windows TTS speech (16 kHz mono) replayed through the `test-audio` build; the live OpenAI dictation inserted the spoken sentence exactly. The test machine had no active capture device, so live microphone capture is still unverified.
 
 ## Windows desktop verification checklist
 
