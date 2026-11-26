@@ -30,7 +30,7 @@ No tray app, installer, configurable shortcuts, or offline model is included. Se
 
 Use Windows 10/11 x64. [Build from source](#build-from-source) to get the current `target\release\dictly.exe`. If you have a ZIP containing this desktop build, extract it first. Older archives contain the console-only app. The executable is unsigned; use only a build you trust. No Rust installation or administrator privileges are required to run a prebuilt executable.
 
-1. Double-click **`dictly.exe`**. No terminal or command-line arguments are needed.
+1. Double-click **`dictly.exe`**. No terminal or command-line arguments are needed. On first launch (no `config.toml` yet) a welcome dialog lists these steps; click **Get started**, press Esc, or click outside it to close it.
 2. Review the **Provider URL** and **Transcription model**. The defaults use OpenAI. For [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), enter `https://ai-gateway.vercel.sh/v1` and a model such as `openai/gpt-4o-mini-transcribe`.
 3. Paste your provider's key into **API key**. It is masked. Turn on **Remember this key on this computer** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can turn off **Provider requires an API key**.
 4. Optionally set a language such as `de` or `en`, enable AI cleanup, choose a microphone, or switch insertion to pasting.

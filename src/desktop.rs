@@ -116,6 +116,8 @@ struct Desktop {
     status: String,
     error: Option<String>,
     logo: egui::TextureHandle,
+    /// First launch (no settings file): show the welcome dialog until dismissed.
+    welcome: bool,
 }
 
 impl Desktop {
@@ -173,6 +175,8 @@ impl Desktop {
                 ..egui::TextureOptions::LINEAR
             },
         );
+        // No settings file yet means nothing has been set up.
+        let welcome = path.is_none() && config.is_ok();
         let loaded = match (&config, &path) {
             (Ok(_), Some(path)) => format!("Loaded {}.", path.display()),
             (Ok(_), None) => "Using built-in defaults.".to_owned(),
@@ -203,6 +207,7 @@ impl Desktop {
             .as_ref()
             .and_then(|_| credential::origin(config.base_url.trim()));
         Self {
+            welcome,
             logo,
             source: match &save_path {
                 Some(save) => format!(
@@ -398,6 +403,9 @@ impl eframe::App for Desktop {
         self.poll();
         if self.worker.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
+        }
+        if self.welcome {
+            self.welcome = !welcome(ctx, &self.logo);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(egui::Margin::same(24)))
@@ -671,16 +679,31 @@ fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(
 
 /// The large gradient pill that enables or disables dictation.
 fn hero_button(ui: &mut egui::Ui, label: &str, danger: bool) -> egui::Response {
+    gradient_button(ui, label, danger, true, None, 60.0)
+}
+
+/// A gradient pill button, optionally led by a microphone badge. Without a
+/// `width` it fits its label; text is centred unless the badge is shown.
+fn gradient_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    danger: bool,
+    microphone: bool,
+    width: Option<f32>,
+    height: f32,
+) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
         label.to_owned(),
         egui::FontId::proportional(17.0),
         Color32::WHITE,
     );
-    let height = 60.0;
-    let (rect, response) = ui.allocate_exact_size(
-        vec2(height + galley.size().x + 30.0, height),
-        Sense::click(),
-    );
+    let fitted = if microphone {
+        height + galley.size().x + 30.0
+    } else {
+        galley.size().x + 48.0
+    };
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(width.unwrap_or(fitted), height), Sense::click());
     response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
     if ui.is_rect_visible(rect) {
         let (mut start, mut end) = if danger {
@@ -701,16 +724,109 @@ fn hero_button(ui: &mut egui::Ui, label: &str, danger: bool) -> egui::Response {
         }
         let painter = ui.painter();
         gradient_pill(painter, rect, start, end);
-        let badge = pos2(rect.left() + height / 2.0, rect.center().y);
-        painter.circle_filled(badge, height / 2.0 - 6.0, Color32::from_white_alpha(46));
-        microphone_glyph(painter, badge);
-        let text_pos = pos2(
-            rect.left() + height + 6.0,
-            rect.center().y - galley.size().y / 2.0,
-        );
+        let text_left = if microphone {
+            let badge = pos2(rect.left() + height / 2.0, rect.center().y);
+            painter.circle_filled(badge, height / 2.0 - 6.0, Color32::from_white_alpha(46));
+            microphone_glyph(painter, badge);
+            rect.left() + height + 6.0
+        } else {
+            rect.center().x - galley.size().x / 2.0
+        };
+        let text_pos = pos2(text_left, rect.center().y - galley.size().y / 2.0);
         painter.galley(text_pos, galley, Color32::WHITE);
     }
     response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// The first-run dialog. Returns true once dismissed by **Get started**,
+/// Escape, or a click outside it.
+fn welcome(ctx: &egui::Context, logo: &egui::TextureHandle) -> bool {
+    let width = (ctx.available_rect().width() - 96.0).clamp(260.0, 440.0);
+    let shortcut = format!("{} + Space", platform::KEYS.replace('+', " + "));
+    let modal = egui::Modal::new(egui::Id::new("welcome"))
+        .backdrop_color(Color32::from_black_alpha(110))
+        .frame(
+            egui::Frame::new()
+                .fill(Color32::WHITE)
+                .corner_radius(CornerRadius::same(18))
+                .inner_margin(egui::Margin::same(28))
+                .shadow(egui::Shadow {
+                    offset: [0, 8],
+                    blur: 28,
+                    spread: 0,
+                    color: Color32::from_black_alpha(40),
+                }),
+        )
+        .show(ctx, |ui| {
+            ui.set_width(width);
+            ui.horizontal(|ui| {
+                ui.add(
+                    egui::Image::new(egui::load::SizedTexture::new(logo.id(), [44.0, 44.0]))
+                        .fit_to_exact_size(vec2(44.0, 44.0)),
+                );
+                ui.label(RichText::new("Dictly").size(24.0).strong());
+            });
+            ui.add_space(8.0);
+            ui.label(RichText::new("Welcome to Dictly").size(26.0).strong());
+            ui.label(RichText::new("Get started in three steps:").color(MUTED));
+            ui.add_space(8.0);
+            step(
+                ui,
+                1,
+                "Connect a provider",
+                "Check the provider URL and paste your API key under Provider. OpenAI is preset.",
+                None,
+            );
+            step(
+                ui,
+                2,
+                "Pick a microphone",
+                "Choose an input under Audio, or keep System default.",
+                None,
+            );
+            step(
+                ui,
+                3,
+                "Dictate anywhere",
+                "Click Enable dictation, focus any text field, then hold to talk or tap to start and stop.",
+                Some(&shortcut),
+            );
+            ui.add_space(14.0);
+            gradient_button(
+                ui,
+                "Get started",
+                false,
+                false,
+                Some(ui.available_width()),
+                46.0,
+            )
+            .clicked()
+        });
+    modal.inner || modal.should_close()
+}
+
+fn step(ui: &mut egui::Ui, number: u8, title: &str, body: &str, keys: Option<&str>) {
+    ui.horizontal_top(|ui| {
+        let (badge, _) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::hover());
+        ui.painter()
+            .circle_filled(badge.center(), 15.0, Color32::from_rgb(238, 242, 255));
+        ui.painter().text(
+            badge.center(),
+            egui::Align2::CENTER_CENTER,
+            number.to_string(),
+            egui::FontId::proportional(15.0),
+            ACCENT,
+        );
+        ui.vertical(|ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+            ui.label(RichText::new(title).size(16.0).strong());
+            ui.label(RichText::new(body).color(MUTED));
+            if let Some(keys) = keys {
+                keycap(ui, keys);
+            }
+        });
+    });
+    ui.add_space(6.0);
 }
 
 /// Fills a horizontal pill with a left-to-right gradient. The colour is linear
@@ -849,6 +965,12 @@ mod tests {
         }
     }
 
+    fn dismiss_welcome(harness: &mut Harness<'_, Desktop>) {
+        harness.get_by_label("Get started").click();
+        harness.run();
+        assert!(!harness.state().welcome);
+    }
+
     #[test]
     fn desktop_reports_setup_errors_and_can_enable_disable_and_restart() {
         let _exclusive = exclusive();
@@ -861,6 +983,7 @@ mod tests {
             .with_size(WINDOW)
             .build_eframe(|cc| Desktop::new(Ok(config), None, None, Ok(None), &cc.egui_ctx));
         harness.run();
+        dismiss_welcome(&mut harness);
         harness.get_by_label("Dictation disabled");
         harness.get_by_label("Enable dictation").click();
         wait_for(
@@ -983,6 +1106,7 @@ mod tests {
             )
         });
         harness.run();
+        dismiss_welcome(&mut harness);
         assert_eq!(harness.state().api_key, "saved-key");
         harness.get_by_label_contains("An API key for http://127.0.0.1:9 is saved");
         // Another path on the same origin keeps the saved key.
