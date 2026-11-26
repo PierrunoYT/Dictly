@@ -128,16 +128,38 @@ impl Desktop {
     ) -> Self {
         ctx.set_visuals(egui::Visuals::light());
         ctx.style_mut(|style| {
-            style.visuals.disabled_alpha = 0.75;
-            style.spacing.item_spacing = egui::vec2(10.0, 9.0);
-            style.spacing.button_padding = egui::vec2(14.0, 9.0);
-            style.spacing.interact_size.y = 30.0;
-            style
-                .text_styles
-                .insert(egui::TextStyle::Body, egui::FontId::proportional(15.0));
-            style
-                .text_styles
-                .insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
+            let visuals = &mut style.visuals;
+            visuals.disabled_alpha = 0.6;
+            visuals.override_text_color = Some(TEXT);
+            visuals.panel_fill = BACKGROUND;
+            visuals.extreme_bg_color = FIELD;
+            visuals.selection.bg_fill = Color32::from_rgb(219, 234, 254);
+            visuals.selection.stroke = Stroke::new(1.5_f32, ACCENT);
+            for widget in [
+                &mut visuals.widgets.inactive,
+                &mut visuals.widgets.hovered,
+                &mut visuals.widgets.active,
+                &mut visuals.widgets.open,
+            ] {
+                widget.corner_radius = CornerRadius::same(8);
+            }
+            visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, BORDER);
+            visuals.widgets.inactive.weak_bg_fill = Color32::WHITE;
+            visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(241, 245, 249);
+            visuals.widgets.hovered.bg_stroke =
+                Stroke::new(1.0_f32, Color32::from_rgb(148, 163, 184));
+            style.spacing.item_spacing = vec2(10.0, 8.0);
+            style.spacing.button_padding = vec2(14.0, 8.0);
+            style.spacing.interact_size.y = 32.0;
+            for (text_style, size) in [
+                (egui::TextStyle::Body, 15.0),
+                (egui::TextStyle::Button, 15.0),
+                (egui::TextStyle::Small, 12.5),
+            ] {
+                style
+                    .text_styles
+                    .insert(text_style, egui::FontId::proportional(size));
+            }
         });
         let icon = eframe::icon_data::from_png_bytes(LOGO).expect("embedded logo is a valid PNG");
         let logo = ctx.load_texture(
@@ -546,6 +568,231 @@ impl eframe::App for Desktop {
     }
 }
 
+fn card<R>(ui: &mut egui::Ui, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new()
+        .fill(Color32::WHITE)
+        .stroke(Stroke::new(1.0_f32, BORDER))
+        .corner_radius(CornerRadius::same(14))
+        .inner_margin(egui::Margin::same(18))
+        .shadow(egui::Shadow {
+            offset: [0, 2],
+            blur: 10,
+            spread: 0,
+            color: Color32::from_black_alpha(12),
+        })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add_contents(ui)
+        })
+        .inner
+}
+
+fn section_title(ui: &mut egui::Ui, title: &str) {
+    ui.horizontal(|ui| {
+        let (bar, _) = ui.allocate_exact_size(vec2(4.0, 18.0), Sense::hover());
+        ui.painter().rect_filled(bar, CornerRadius::same(2), ACCENT);
+        ui.label(RichText::new(title).size(17.0).strong());
+    });
+    ui.add_space(2.0);
+}
+
+/// A muted caption above a full-width text field, linked for screen readers.
+fn field(ui: &mut egui::Ui, label: &str, edit: egui::TextEdit<'_>) -> egui::Response {
+    let label = ui.label(RichText::new(label).color(MUTED));
+    ui.add(edit.desired_width(f32::INFINITY).margin(vec2(10.0, 7.0)))
+        .labelled_by(label.id)
+}
+
+fn keycap(ui: &mut egui::Ui, keys: &str) {
+    egui::Frame::new()
+        .fill(KEYCAP)
+        .stroke(Stroke::new(1.0_f32, BORDER))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(10, 5))
+        .show(ui, |ui| {
+            ui.label(RichText::new(keys).strong());
+        });
+}
+
+/// A switch reported to accessibility as a checkbox; its text also toggles it.
+fn toggle(ui: &mut egui::Ui, on: &mut bool, text: &str) -> egui::Response {
+    ui.horizontal(|ui| {
+        let (rect, mut response) = ui.allocate_exact_size(vec2(38.0, 22.0), Sense::click());
+        let label = ui.add(egui::Label::new(text).wrap().sense(Sense::click()));
+        if response.clicked() || label.clicked() {
+            *on = !*on;
+            response.mark_changed();
+        }
+        response
+            .widget_info(|| WidgetInfo::selected(WidgetType::Checkbox, ui.is_enabled(), *on, text));
+        if ui.is_rect_visible(rect) {
+            let t = ui.ctx().animate_bool(response.id, *on);
+            let painter = ui.painter();
+            painter.rect_filled(rect, CornerRadius::same(11), mix(SWITCH_OFF, ACCENT, t));
+            let x = egui::lerp(rect.left() + 11.0..=rect.right() - 11.0, t);
+            painter.circle_filled(pos2(x, rect.center().y), 8.0, Color32::WHITE);
+        }
+        response.on_hover_cursor(egui::CursorIcon::PointingHand)
+    })
+    .inner
+}
+
+fn segmented<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let last = options.len() - 1;
+        for (index, &(option, text)) in options.iter().enumerate() {
+            let selected = *value == option;
+            let (left, right) = (
+                if index == 0 { 8 } else { 0 },
+                if index == last { 8 } else { 0 },
+            );
+            let button = egui::Button::new(RichText::new(text).color(if selected {
+                Color32::WHITE
+            } else {
+                TEXT
+            }))
+            .fill(if selected { ACCENT } else { Color32::WHITE })
+            .stroke(Stroke::new(1.0_f32, if selected { ACCENT } else { BORDER }))
+            .corner_radius(CornerRadius {
+                nw: left,
+                sw: left,
+                ne: right,
+                se: right,
+            })
+            .min_size(vec2(120.0, 34.0))
+            .selected(selected);
+            if ui.add(button).clicked() {
+                *value = option;
+            }
+        }
+    });
+}
+
+/// The large gradient pill that enables or disables dictation.
+fn hero_button(ui: &mut egui::Ui, label: &str, danger: bool) -> egui::Response {
+    let galley = ui.painter().layout_no_wrap(
+        label.to_owned(),
+        egui::FontId::proportional(17.0),
+        Color32::WHITE,
+    );
+    let height = 60.0;
+    let (rect, response) = ui.allocate_exact_size(
+        vec2(height + galley.size().x + 30.0, height),
+        Sense::click(),
+    );
+    response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, ui.is_enabled(), label));
+    if ui.is_rect_visible(rect) {
+        let (mut start, mut end) = if danger {
+            (DANGER, DANGER_END)
+        } else {
+            (ACCENT, ACCENT_END)
+        };
+        let shade = if response.is_pointer_button_down_on() {
+            Some((Color32::BLACK, 0.12))
+        } else if response.hovered() {
+            Some((Color32::WHITE, 0.12))
+        } else {
+            None
+        };
+        if let Some((toward, amount)) = shade {
+            start = mix(start, toward, amount);
+            end = mix(end, toward, amount);
+        }
+        let painter = ui.painter();
+        gradient_pill(painter, rect, start, end);
+        let badge = pos2(rect.left() + height / 2.0, rect.center().y);
+        painter.circle_filled(badge, height / 2.0 - 6.0, Color32::from_white_alpha(46));
+        microphone_glyph(painter, badge);
+        let text_pos = pos2(
+            rect.left() + height + 6.0,
+            rect.center().y - galley.size().y / 2.0,
+        );
+        painter.galley(text_pos, galley, Color32::WHITE);
+    }
+    response.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+/// Fills a horizontal pill with a left-to-right gradient. The colour is linear
+/// in x, so a triangle fan from the centre interpolates it exactly.
+fn gradient_pill(painter: &egui::Painter, rect: Rect, start: Color32, end: Color32) {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    const STEPS: usize = 20;
+    let radius = rect.height() / 2.0;
+    let color_at = |x: f32| mix(start, end, (x - rect.left()) / rect.width());
+    let mut outline: Vec<Pos2> = Vec::with_capacity(2 * (STEPS + 1));
+    for (center, from) in [
+        (pos2(rect.right() - radius, rect.center().y), -FRAC_PI_2),
+        (pos2(rect.left() + radius, rect.center().y), FRAC_PI_2),
+    ] {
+        for step in 0..=STEPS {
+            let angle = from + PI * step as f32 / STEPS as f32;
+            outline.push(center + radius * vec2(angle.cos(), angle.sin()));
+        }
+    }
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(rect.center(), color_at(rect.center().x));
+    for &point in &outline {
+        mesh.colored_vertex(point, color_at(point.x));
+    }
+    let count = outline.len() as u32;
+    for index in 0..count {
+        mesh.add_triangle(0, 1 + index, 1 + (index + 1) % count);
+    }
+    painter.add(egui::Shape::mesh(mesh));
+    // Mesh edges are not anti-aliased; a thin matching rim smooths them.
+    for (index, &a) in outline.iter().enumerate() {
+        let b = outline[(index + 1) % outline.len()];
+        painter.line_segment([a, b], Stroke::new(1.0_f32, color_at((a.x + b.x) / 2.0)));
+    }
+}
+
+fn microphone_glyph(painter: &egui::Painter, center: Pos2) {
+    use std::f32::consts::PI;
+    let stroke = Stroke::new(2.0_f32, Color32::WHITE);
+    painter.rect_filled(
+        Rect::from_center_size(center - vec2(0.0, 4.5), vec2(10.0, 17.0)),
+        CornerRadius::same(5),
+        Color32::WHITE,
+    );
+    let arc = (0..=12)
+        .map(|step| {
+            let angle = PI * step as f32 / 12.0;
+            pos2(
+                center.x + 8.5 * angle.cos(),
+                center.y - 1.0 + 8.5 * angle.sin(),
+            )
+        })
+        .collect();
+    painter.add(egui::epaint::PathShape::line(arc, stroke));
+    painter.line_segment(
+        [
+            pos2(center.x, center.y + 7.5),
+            pos2(center.x, center.y + 12.0),
+        ],
+        stroke,
+    );
+    painter.line_segment(
+        [
+            pos2(center.x - 5.0, center.y + 12.0),
+            pos2(center.x + 5.0, center.y + 12.0),
+        ],
+        stroke,
+    );
+}
+
+/// Linear blend of two colours; `t` is clamped to 0..=1.
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let blend = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() as u8;
+    Color32::from_rgba_premultiplied(
+        blend(a.r(), b.r()),
+        blend(a.g(), b.g()),
+        blend(a.b(), b.b()),
+        blend(a.a(), b.a()),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     /// Taller than the default window so every settings field is on screen:
@@ -691,11 +938,9 @@ mod tests {
         let loaded = Config::load(Some(&path));
         assert!(loaded.is_err());
         let (shown, saved) = (path.clone(), path.clone());
-        let mut harness = Harness::builder()
-            .with_size([620.0, 820.0])
-            .build_eframe(|cc| {
-                Desktop::new(loaded, Some(shown), Some(saved), Ok(None), &cc.egui_ctx)
-            });
+        let mut harness = Harness::builder().with_size(WINDOW).build_eframe(|cc| {
+            Desktop::new(loaded, Some(shown), Some(saved), Ok(None), &cc.egui_ctx)
+        });
         harness.run();
         harness.get_by_label_contains("it is left unchanged");
         assert!(
@@ -728,17 +973,15 @@ mod tests {
             base_url: "http://127.0.0.1:9/v1".into(),
             ..Config::default()
         };
-        let mut harness = Harness::builder()
-            .with_size([620.0, 820.0])
-            .build_eframe(|cc| {
-                Desktop::new(
-                    Ok(config),
-                    None,
-                    None,
-                    Ok(Some("saved-key".into())),
-                    &cc.egui_ctx,
-                )
-            });
+        let mut harness = Harness::builder().with_size(WINDOW).build_eframe(|cc| {
+            Desktop::new(
+                Ok(config),
+                None,
+                None,
+                Ok(Some("saved-key".into())),
+                &cc.egui_ctx,
+            )
+        });
         harness.run();
         assert_eq!(harness.state().api_key, "saved-key");
         harness.get_by_label_contains("An API key for http://127.0.0.1:9 is saved");
@@ -769,11 +1012,9 @@ mod tests {
     #[test]
     fn closing_waits_for_the_worker_to_finish_restoring_the_clipboard() {
         let _exclusive = exclusive();
-        let mut harness = Harness::builder()
-            .with_size([620.0, 820.0])
-            .build_eframe(|cc| {
-                Desktop::new(Ok(Config::default()), None, None, Ok(None), &cc.egui_ctx)
-            });
+        let mut harness = Harness::builder().with_size(WINDOW).build_eframe(|cc| {
+            Desktop::new(Ok(Config::default()), None, None, Ok(None), &cc.egui_ctx)
+        });
         harness.run();
         // Stands in for a paste that keeps running for its 400 ms settle after
         // the stop request, then restores the clipboard.
