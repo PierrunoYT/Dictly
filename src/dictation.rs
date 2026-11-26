@@ -165,6 +165,20 @@ pub fn run_controlled(
         "Audio is sent to {}. Cleanup: {}.",
         config.base_url, config.cleanup
     ));
+    // A cancel shortcut another app owns (Xfce and KDE bind Ctrl+Alt+Esc to
+    // xkill) falls back to plain Esc while recording or transcribing.
+    let esc_cancels = shortcuts.unavailable().contains(&"Esc");
+    for &name in shortcuts.unavailable() {
+        report(&format!(
+            "{KEYS}+{name} is used by another app, so Dictly cannot use it. {}",
+            if name == "Esc" {
+                "Press Esc while recording or transcribing to cancel instead."
+            } else {
+                "Retained text cannot be inserted by shortcut; free that shortcut in your system settings to use it."
+            }
+        ));
+    }
+    let mut esc_was_down = false;
     report(
         "Ready. Focus an editable text field before starting. Do not change fields until insertion finishes.",
     );
@@ -183,7 +197,11 @@ pub fn run_controlled(
             *focus_changed |= Target::current() != Some(*target);
         }
         feedback.tick();
-        while let Some(shortcut) = shortcuts.poll() {
+        let esc_down = esc_cancels && platform::escape_down();
+        let mut esc_cancel = (esc_down && !esc_was_down && !matches!(state, State::Idle))
+            .then_some(Shortcut::Cancel);
+        esc_was_down = esc_down;
+        while let Some(shortcut) = esc_cancel.take().or_else(|| shortcuts.poll()) {
             if shortcut == Shortcut::Quit || stopped.load(Ordering::Acquire) {
                 return Ok(());
             }

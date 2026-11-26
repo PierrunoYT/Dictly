@@ -202,6 +202,7 @@ pub struct Shortcuts {
     /// a press with the same timestamp, which is not a new press.
     released: Vec<(Keycode, Timestamp)>,
     down: Vec<Keycode>,
+    unavailable: Vec<&'static str>,
 }
 
 /// Grabs must also match with Caps Lock and Num Lock (Mod2) on.
@@ -225,6 +226,7 @@ impl Shortcuts {
             keys: vec![],
             released: vec![],
             down: vec![],
+            unavailable: vec![],
         };
         for (keysym, shortcut, name) in [
             (XK_SPACE, Shortcut::Toggle, "Space"),
@@ -234,21 +236,48 @@ impl Shortcuts {
             let code = *keycodes(&keysyms, &[keysym])
                 .first()
                 .with_context(|| format!("The keyboard has no {name} key"))?;
+            let mut grabbed = true;
             for lock in locks() {
                 let modifiers = ModMask::CONTROL | ModMask::M1 | lock;
-                shortcuts
+                grabbed &= shortcuts
                     .connection
-                    .grab_key(true, root, modifiers, code, GrabMode::ASYNC, GrabMode::ASYNC)?
+                    .grab_key(
+                        true,
+                        root,
+                        modifiers,
+                        code,
+                        GrabMode::ASYNC,
+                        GrabMode::ASYNC,
+                    )?
                     .check()
-                    .with_context(|| {
-                        format!(
-                            "Cannot register Ctrl+Alt+{name}. Another app or instance may own this shortcut."
-                        )
-                    })?;
+                    .is_ok();
             }
-            shortcuts.keys.push((code, shortcut));
+            if grabbed {
+                shortcuts.keys.push((code, shortcut));
+                continue;
+            }
+            // Xfce and KDE bind Ctrl+Alt+Esc to xkill by default. Only the
+            // recording shortcut is essential; the others are reported.
+            for lock in locks() {
+                let _ = shortcuts.connection.ungrab_key(
+                    code,
+                    root,
+                    ModMask::CONTROL | ModMask::M1 | lock,
+                );
+            }
+            if shortcut == Shortcut::Toggle {
+                bail!(
+                    "Cannot register Ctrl+Alt+{name}. Another app or instance may own this shortcut."
+                );
+            }
+            shortcuts.unavailable.push(name);
         }
         Ok(shortcuts)
+    }
+
+    /// Shortcut keys ("Esc", "V") another app owns, so they do nothing.
+    pub fn unavailable(&self) -> &[&'static str] {
+        &self.unavailable
     }
 
     /// The next new shortcut press, or `None` once no events are pending.

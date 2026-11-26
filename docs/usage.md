@@ -134,7 +134,9 @@ This command uploads the file to the configured provider and may incur charges; 
 | `needs Accessibility access` (macOS) | Allow the app that started Dictly in System Settings › Privacy & Security › Accessibility, then enable dictation again. For the command line that app is your terminal. |
 | `needs an X11 session` (Linux) | Log out and choose an Xorg/X11 session at the login screen. |
 | `Cannot save the API key in the system keyring` (Linux) | No Secret Service is running. Install and unlock GNOME Keyring or KWallet, or leave **Remember this key** turned off. |
-| Cannot register a shortcut | Close another Dictly instance or another app using Ctrl+Alt+Space, Ctrl+Alt+Esc, or Ctrl+Alt+V. |
+| Cannot register a shortcut | Close another Dictly instance or another app using Ctrl+Alt+Space. Only that shortcut is required. |
+| `Ctrl+Alt+Esc is used by another app` | Xfce and KDE bind it to xkill by default. Dictly keeps running: press plain Esc while recording or transcribing to cancel. To use the shortcut, remove that binding in your keyboard settings (Xfce: Keyboard › Application Shortcuts). |
+| `Ctrl+Alt+V is used by another app` | Retained text cannot be inserted by shortcut. Free the binding in your keyboard settings, or cancel and dictate again. |
 | HTTP 401/403 | Check provider credentials, API access, and model permissions. |
 | HTTP 404 | Check the API base URL and configured model. The app appends `/audio/transcriptions` and `/chat/completions`. |
 | HTTP 429 or 5xx | Dictly already retried once. Check quota or provider availability and record again later. |

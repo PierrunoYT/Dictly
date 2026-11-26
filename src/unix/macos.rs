@@ -244,6 +244,11 @@ impl Shortcuts {
         result.map(|()| shortcuts)
     }
 
+    /// The event tap sees every key, so no shortcut is ever taken.
+    pub fn unavailable(&self) -> &[&'static str] {
+        &[]
+    }
+
     /// The next shortcut press, or `None` once none is pending.
     pub fn poll(&mut self) -> Option<Shortcut> {
         self.events.try_recv().ok()

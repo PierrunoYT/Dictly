@@ -75,12 +75,13 @@ impl Drop for SingleInstance {
     }
 }
 
-/// Global shortcuts bound to this thread's message queue.
-pub struct Shortcuts(Vec<i32>);
+/// Global shortcuts bound to this thread's message queue, and the names of
+/// those another app owns.
+pub struct Shortcuts(Vec<i32>, Vec<&'static str>);
 
 impl Shortcuts {
     pub fn register() -> Result<Self> {
-        let mut keys = Self(vec![]);
+        let mut keys = Self(vec![], vec![]);
         for (id, key) in [(TOGGLE, VK_SPACE), (CANCEL, VK_ESCAPE), (RECOVER, 0x56)] {
             // SAFETY: null HWND binds the hotkey to this thread's message queue.
             let registered = unsafe {
@@ -91,18 +92,28 @@ impl Shortcuts {
                     key as u32,
                 )
             };
+            let name = match id {
+                TOGGLE => "Space",
+                CANCEL => "Esc",
+                _ => "V",
+            };
+            if registered != 0 {
+                keys.0.push(id);
+                continue;
+            }
+            // Only the recording shortcut is essential; the others are reported.
             ensure!(
-                registered != 0,
-                "Cannot register Ctrl+Alt+{}. Another app or instance may own this shortcut.",
-                match id {
-                    TOGGLE => "Space",
-                    CANCEL => "Esc",
-                    _ => "V",
-                }
+                id != TOGGLE,
+                "Cannot register Ctrl+Alt+{name}. Another app or instance may own this shortcut."
             );
-            keys.0.push(id);
+            keys.1.push(name);
         }
         Ok(keys)
+    }
+
+    /// Shortcut keys ("Esc", "V") another app owns, so they do nothing.
+    pub fn unavailable(&self) -> &[&'static str] {
+        &self.1
     }
 }
 
