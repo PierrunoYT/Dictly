@@ -41,7 +41,7 @@ core-foundation = "0.10"
 core-graphics = "0.25"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-eframe = { version = "0.33", default-features = false, features = ["x11"] }
+eframe = { version = "0.33", default-features = false, features = ["x11", "wayland"] }
 x11rb = "0.13"
 
 [profile.release]
