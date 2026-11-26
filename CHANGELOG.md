@@ -6,6 +6,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Added
 
+- Linux live dictation also recognizes a Wayland session by `WAYLAND_DISPLAY` when `XDG_SESSION_TYPE` is not set, and reports that an X11 session is needed instead of starting through Xwayland, where shortcuts and typing would reach only X11 apps.
 - Dictly starts even when another app owns Ctrl+Alt+Esc or Ctrl+Alt+V, as Xfce and KDE do with Ctrl+Alt+Esc (xkill). It reports the taken shortcut, and plain Esc cancels while recording or transcribing instead. Only Ctrl+Alt+Space is required.
 - New Dictly logo (a microphone with a sound wave and text cursor), used in the README, as the desktop window icon, and as the Windows executable icon.
 - Redesigned desktop window: logo header, a large gradient **Enable dictation** button beside the status, shortcut key caps, and settings grouped into Provider, Audio, and Output cards with toggle switches and a **Typing | Pasting** switch. A note now explains why settings are locked while dictation is enabled. Layout follows the `docs/design/settings-light.png` mockup.

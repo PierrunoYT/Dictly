@@ -34,7 +34,12 @@ struct Display {
 }
 
 fn connect() -> Result<(RustConnection, usize)> {
-    if std::env::var("XDG_SESSION_TYPE").is_ok_and(|session| session == "wayland") {
+    // XDG_SESSION_TYPE is missing when Dictly starts outside the login
+    // session's environment; WAYLAND_DISPLAY still marks a Wayland session,
+    // where Xwayland would let Dictly reach only X11 apps.
+    if std::env::var("XDG_SESSION_TYPE").is_ok_and(|session| session == "wayland")
+        || std::env::var_os("WAYLAND_DISPLAY").is_some_and(|display| !display.is_empty())
+    {
         bail!(
             "Live dictation on Linux needs an X11 session: Wayland does not let apps register global shortcuts or type into other windows. Log in with an X11 (Xorg) session."
         );
