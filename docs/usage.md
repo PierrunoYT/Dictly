@@ -133,7 +133,7 @@ This command uploads the file to the configured provider and may incur charges; 
 | Too short or no audible input | Speak for more than 200 ms; check mute, input level, and selected default microphone. |
 | `needs Accessibility access` (macOS) | Allow the app that started Dictly in System Settings › Privacy & Security › Accessibility, then enable dictation again. For the command line that app is your terminal. |
 | `needs an X11 session` (Linux) | Log out and choose an Xorg/X11 session at the login screen. |
-| `Cannot save the API key in the system keyring` (Linux) | No Secret Service is running. Install and unlock GNOME Keyring or KWallet, or leave **Remember this key** unchecked. |
+| `Cannot save the API key in the system keyring` (Linux) | No Secret Service is running. Install and unlock GNOME Keyring or KWallet, or leave **Remember this key** turned off. |
 | Cannot register a shortcut | Close another Dictly instance or another app using Ctrl+Alt+Space, Ctrl+Alt+Esc, or Ctrl+Alt+V. |
 | HTTP 401/403 | Check provider credentials, API access, and model permissions. |
 | HTTP 404 | Check the API base URL and configured model. The app appends `/audio/transcriptions` and `/chat/completions`. |

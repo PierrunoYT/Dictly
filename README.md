@@ -10,7 +10,7 @@ This is an independent implementation inspired by Wispr Flow's public behavior, 
 
 ## Features
 
-- Desktop window with provider settings, a masked API key, enable/disable controls, status, and errors.
+- Desktop window with a large enable/disable button, status, shortcut reference, and grouped Provider, Audio, and Output settings with a masked API key.
 - Settings saved beside the executable; optional API-key storage in Windows Credential Manager, the macOS Keychain, or a Linux Secret Service keyring.
 - Hold-to-talk or tap-to-toggle recording, plus cancel and transcript-recovery shortcuts.
 - Start/stop sounds and an always-on-top status overlay that never takes focus.
@@ -32,7 +32,7 @@ Use Windows 10/11 x64. [Build from source](#build-from-source) to get the curren
 
 1. Double-click **`dictly.exe`**. No terminal or command-line arguments are needed.
 2. Review the **Provider URL** and **Transcription model**. The defaults use OpenAI. For [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), enter `https://ai-gateway.vercel.sh/v1` and a model such as `openai/gpt-4o-mini-transcribe`.
-3. Paste your provider's key into **API key**. It is masked. Check **Remember this key on this computer** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can use the unchecked **Provider requires an API key** option.
+3. Paste your provider's key into **API key**. It is masked. Turn on **Remember this key on this computer** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can turn off **Provider requires an API key**.
 4. Optionally set a language such as `de` or `en`, enable AI cleanup, choose a microphone, or switch insertion to pasting.
 5. Click **Enable dictation**, wait for **Ready**, then focus a text field in another app and use the shortcuts below.
 

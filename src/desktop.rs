@@ -6,7 +6,10 @@ use crate::{
     platform::{self, credential},
 };
 use anyhow::{Context, Result};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{
+    self, Color32, CornerRadius, Pos2, Rect, RichText, Sense, Stroke, WidgetInfo, WidgetType, pos2,
+    vec2,
+};
 use std::{
     path::PathBuf,
     sync::{
@@ -21,6 +24,21 @@ use std::{
 /// How long closing the window waits for the worker to stop. A paste in
 /// progress restores the previous clipboard text within about 0.4 s.
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(1);
+
+const LOGO: &[u8] = include_bytes!("../assets/dictly-logo.png");
+
+const BACKGROUND: Color32 = Color32::from_rgb(244, 246, 251);
+const FIELD: Color32 = Color32::from_rgb(250, 251, 253);
+const BORDER: Color32 = Color32::from_rgb(226, 232, 240);
+const KEYCAP: Color32 = Color32::from_rgb(246, 247, 250);
+const SWITCH_OFF: Color32 = Color32::from_rgb(203, 213, 225);
+const TEXT: Color32 = Color32::from_rgb(15, 23, 42);
+const MUTED: Color32 = Color32::from_rgb(100, 116, 139);
+const ACCENT: Color32 = Color32::from_rgb(37, 99, 235);
+const ACCENT_END: Color32 = Color32::from_rgb(139, 92, 246);
+const DANGER: Color32 = Color32::from_rgb(220, 38, 38);
+const DANGER_END: Color32 = Color32::from_rgb(225, 29, 72);
+const SUCCESS: Color32 = Color32::from_rgb(22, 163, 74);
 
 pub fn run(config_path: Option<PathBuf>) -> Result<()> {
     let _instance = platform::SingleInstance::acquire()?;
@@ -47,8 +65,7 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
             .with_inner_size([620.0, 820.0])
             .with_min_inner_size([440.0, 540.0])
             .with_icon(
-                eframe::icon_data::from_png_bytes(include_bytes!("../assets/dictly-logo.png"))
-                    .expect("embedded logo is a valid PNG"),
+                eframe::icon_data::from_png_bytes(LOGO).expect("embedded logo is a valid PNG"),
             ),
         ..Default::default()
     };
@@ -98,6 +115,7 @@ struct Desktop {
     ready: bool,
     status: String,
     error: Option<String>,
+    logo: egui::TextureHandle,
 }
 
 impl Desktop {
@@ -121,6 +139,18 @@ impl Desktop {
                 .text_styles
                 .insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
         });
+        let icon = eframe::icon_data::from_png_bytes(LOGO).expect("embedded logo is a valid PNG");
+        let logo = ctx.load_texture(
+            "logo",
+            egui::ColorImage::from_rgba_unmultiplied(
+                [icon.width as usize, icon.height as usize],
+                &icon.rgba,
+            ),
+            egui::TextureOptions {
+                mipmap_mode: Some(egui::TextureFilter::Linear),
+                ..egui::TextureOptions::LINEAR
+            },
+        );
         let loaded = match (&config, &path) {
             (Ok(_), Some(path)) => format!("Loaded {}.", path.display()),
             (Ok(_), None) => "Using built-in defaults.".to_owned(),
@@ -151,6 +181,7 @@ impl Desktop {
             .as_ref()
             .and_then(|_| credential::origin(config.base_url.trim()));
         Self {
+            logo,
             source: match &save_path {
                 Some(save) => format!(
                     "{loaded} Settings are saved to {} when you enable dictation.",
@@ -347,120 +378,169 @@ impl eframe::App for Desktop {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(Color32::from_rgb(248, 250, 253)).inner_margin(24.0))
+            .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(egui::Margin::same(24)))
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    ui.heading(RichText::new("Dictly").size(32.0).strong());
-                    ui.label("Your voice, wherever you type.");
-                    ui.add_space(8.0);
-                    egui::Frame::group(ui.style()).fill(Color32::WHITE).show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.horizontal_wrapped(|ui| {
-                            ui.strong(if self.ready { "Dictation enabled" } else { "Dictation disabled" });
-                            if self.worker.is_some() {
-                                let stopping = self.worker.as_ref().unwrap().stop.load(Ordering::Acquire);
-                                if ui.add_enabled(!stopping, egui::Button::new(RichText::new("Disable dictation").color(Color32::WHITE))
-                                    .fill(Color32::from_rgb(165, 32, 42))).clicked() {
-                                    self.stop();
-                                }
-                            } else if ui.add(egui::Button::new(RichText::new("Enable dictation").color(Color32::WHITE))
-                                .fill(Color32::from_rgb(32, 103, 220))).clicked() {
-                                self.start(ctx);
-                            }
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::Image::new(egui::load::SizedTexture::new(self.logo.id(), [56.0, 56.0]))
+                                .fit_to_exact_size(vec2(56.0, 56.0)),
+                        );
+                        ui.vertical(|ui| {
+                            ui.add_space(2.0);
+                            ui.label(RichText::new("Dictly").size(30.0).strong());
+                            ui.label(RichText::new("Your voice, wherever you type.").color(MUTED));
                         });
-                        ui.label(&self.status);
-                        if let Some(error) = &self.error {
-                            ui.colored_label(Color32::from_rgb(165, 32, 42), error);
-                        }
                     });
-                    ui.add_space(6.0);
-                    ui.add_enabled_ui(self.worker.is_none(), |ui| {
-                        let label = ui.label("Provider URL");
-                        if ui.add(egui::TextEdit::singleline(&mut self.config.base_url).desired_width(f32::INFINITY)).labelled_by(label.id).changed() {
-                            self.provider_changed();
-                        }
-                        let label = ui.label("Transcription model");
-                        ui.add(egui::TextEdit::singleline(&mut self.config.transcription_model).desired_width(f32::INFINITY)).labelled_by(label.id);
-                        ui.checkbox(&mut self.authenticated, "Provider requires an API key");
-                        if self.authenticated {
-                            let label = ui.label("API key");
-                            if ui.add(egui::TextEdit::singleline(&mut self.api_key).password(true)
-                                .hint_text("Paste your API key here").desired_width(f32::INFINITY)).labelled_by(label.id).changed() {
-                                self.prefilled_origin = None;
-                            }
-                            ui.checkbox(&mut self.remember_key, format!("Remember this key on this computer ({})", credential::STORE));
-                            let env = if self.config.api_key_env.is_empty() { "OPENAI_API_KEY" } else { &self.config.api_key_env };
-                            ui.small(if self.remember_key {
-                                "Saved for this provider and your user account when you enable dictation; never written to the settings file.".to_owned()
-                            } else {
-                                format!("Used for this session only. Leave blank to use {env} from the environment.")
-                            });
-                        }
-                        let label = ui.label("Language (optional)");
-                        ui.add(egui::TextEdit::singleline(&mut self.language)
-                            .hint_text("Auto-detect, or a two-letter code such as en or de").desired_width(f32::INFINITY)).labelled_by(label.id);
-                        ui.checkbox(&mut self.config.cleanup, "Clean up transcription with AI (additional request)");
-                        if self.config.cleanup {
-                            let label = ui.label("Cleanup model");
-                            ui.add(egui::TextEdit::singleline(&mut self.config.cleanup_model).desired_width(f32::INFINITY)).labelled_by(label.id);
-                        }
-                        let label = ui.label("Microphone");
-                        ui.horizontal(|ui| {
-                            let selected = match &self.config.microphone {
-                                None => "System default".to_owned(),
-                                Some(name) if self.microphones.contains(name) => name.clone(),
-                                Some(name) => format!("{name} (not connected)"),
+                    ui.add_space(12.0);
+
+                    card(ui, |ui| {
+                        let wide = ui.available_width() >= 480.0;
+                        let mut contents = |ui: &mut egui::Ui| {
+                            let (label, danger, enabled) = match &self.worker {
+                                Some(worker) => ("Disable dictation", true, !worker.stop.load(Ordering::Acquire)),
+                                None => ("Enable dictation", false, true),
                             };
-                            egui::ComboBox::from_id_salt("microphone")
-                                .selected_text(selected)
-                                .width(ui.available_width() - 90.0)
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut self.config.microphone, None, "System default");
-                                    for name in &self.microphones {
-                                        ui.selectable_value(&mut self.config.microphone, Some(name.clone()), name);
-                                    }
-                                })
-                                .response
-                                .labelled_by(label.id);
-                            if ui.button("Refresh").clicked() {
-                                self.microphones = microphones();
+                            if ui.add_enabled_ui(enabled, |ui| hero_button(ui, label, danger)).inner.clicked() {
+                                if self.worker.is_some() {
+                                    self.stop();
+                                } else {
+                                    self.start(ctx);
+                                }
                             }
-                        });
-                        if self.microphones.is_empty() {
-                            ui.small("No microphone found. Connect one, then click Refresh.");
+                            ui.add_space(8.0);
+                            ui.vertical(|ui| {
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                                ui.horizontal(|ui| {
+                                    let color = if self.ready { SUCCESS } else { MUTED };
+                                    let (dot, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
+                                    ui.painter().circle_filled(dot.center(), 5.0, color);
+                                    ui.label(RichText::new(if self.ready { "Dictation enabled" } else { "Dictation disabled" })
+                                        .strong().color(color));
+                                });
+                                ui.label(RichText::new(&self.status).color(MUTED));
+                                if let Some(error) = &self.error {
+                                    ui.colored_label(DANGER, error);
+                                }
+                            });
+                        };
+                        // `horizontal` grows to its content; a left-to-right
+                        // `with_layout` would centre within the whole panel height.
+                        if wide {
+                            ui.horizontal(&mut contents);
+                        } else {
+                            ui.vertical(&mut contents);
                         }
-                        ui.checkbox(&mut self.config.sounds, "Play sounds when recording starts and stops");
-                        if cfg!(windows) {
-                            ui.checkbox(&mut self.config.overlay, "Show recording status on screen");
-                        }
-                        ui.label("Insert text by");
-                        ui.radio_value(&mut self.config.insertion, Insertion::Type, "Typing: clipboard untouched; about 100 characters per second");
-                        ui.radio_value(&mut self.config.insertion, Insertion::Paste, "Pasting: instant; previous clipboard text is restored");
                     });
-                    ui.add_space(6.0);
-                    egui::Frame::group(ui.style()).fill(Color32::WHITE).show(ui, |ui| {
-                        ui.set_width(ui.available_width());
-                        ui.strong("Dictate in another app");
-                        ui.label("Enable dictation, then focus the text field where you want to write.");
-                        egui::Grid::new("shortcuts").spacing([24.0, 8.0]).show(ui, |ui| {
-                            let keys = platform::KEYS.replace('+', " + ");
-                            for (key, action) in [
+                    ui.add_space(10.0);
+
+                    card(ui, |ui| {
+                        section_title(ui, "Shortcuts");
+                        ui.label(RichText::new("Enable dictation, then focus the text field where you want to write.").color(MUTED));
+                        ui.add_space(4.0);
+                        let keys = platform::KEYS.replace('+', " + ");
+                        ui.columns(3, |columns| {
+                            for (column, (key, action)) in columns.iter_mut().zip([
                                 ("Space", "Hold to talk, or tap to start / finish"),
                                 ("Esc", "Cancel / clear retained text"),
                                 ("V", "Retry retained text insertion"),
-                            ] {
-                                ui.label(RichText::new(format!("{keys} + {key}")).strong());
-                                ui.label(action);
-                                ui.end_row();
+                            ]) {
+                                keycap(column, &format!("{keys} + {key}"));
+                                column.label(RichText::new(action).size(13.0).color(MUTED));
                             }
                         });
                     });
-                    ui.label("Audio is sent to your configured provider. AI cleanup also sends the transcript. Provider charges and privacy policies apply.");
-                    ui.small("Minimize this window to keep dictating. Closing it stops dictation. No tray icon or background autostart.");
-                    if let Some(origin) = &self.saved_origin {
-                        ui.small(format!("An API key for {origin} is saved in the {}. Uncheck \u{201c}Remember this key\u{201d} and enable dictation to remove it.", credential::STORE));
+                    ui.add_space(16.0);
+
+                    ui.label(RichText::new("Settings").size(20.0).strong());
+                    let locked = self.worker.is_some();
+                    if locked {
+                        ui.label(RichText::new("Disable dictation to change settings.").color(MUTED));
                     }
-                    ui.small(&self.source);
+                    ui.add_enabled_ui(!locked, |ui| {
+                        card(ui, |ui| {
+                            section_title(ui, "Provider");
+                            if field(ui, "Provider URL", egui::TextEdit::singleline(&mut self.config.base_url)).changed() {
+                                self.provider_changed();
+                            }
+                            field(ui, "Transcription model", egui::TextEdit::singleline(&mut self.config.transcription_model));
+                            toggle(ui, &mut self.authenticated, "Provider requires an API key");
+                            if self.authenticated {
+                                if field(ui, "API key", egui::TextEdit::singleline(&mut self.api_key)
+                                    .password(true).hint_text("Paste your API key here")).changed() {
+                                    self.prefilled_origin = None;
+                                }
+                                toggle(ui, &mut self.remember_key, &format!("Remember this key on this computer ({})", credential::STORE));
+                                let env = if self.config.api_key_env.is_empty() { "OPENAI_API_KEY" } else { &self.config.api_key_env };
+                                ui.label(RichText::new(if self.remember_key {
+                                    "Saved for this provider and your user account when you enable dictation; never written to the settings file.".to_owned()
+                                } else {
+                                    format!("Used for this session only. Leave blank to use {env} from the environment.")
+                                }).small().color(MUTED));
+                            }
+                        });
+                        ui.add_space(10.0);
+
+                        card(ui, |ui| {
+                            section_title(ui, "Audio");
+                            field(ui, "Language (optional)", egui::TextEdit::singleline(&mut self.language)
+                                .hint_text("Auto-detect, or a two-letter code such as en or de"));
+                            let label = ui.label(RichText::new("Microphone").color(MUTED));
+                            ui.horizontal(|ui| {
+                                let selected = match &self.config.microphone {
+                                    None => "System default".to_owned(),
+                                    Some(name) if self.microphones.contains(name) => name.clone(),
+                                    Some(name) => format!("{name} (not connected)"),
+                                };
+                                egui::ComboBox::from_id_salt("microphone")
+                                    .selected_text(selected)
+                                    .width(ui.available_width() - 96.0)
+                                    .show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut self.config.microphone, None, "System default");
+                                        for name in &self.microphones {
+                                            ui.selectable_value(&mut self.config.microphone, Some(name.clone()), name);
+                                        }
+                                    })
+                                    .response
+                                    .labelled_by(label.id);
+                                if ui.button("Refresh").clicked() {
+                                    self.microphones = microphones();
+                                }
+                            });
+                            if self.microphones.is_empty() {
+                                ui.label(RichText::new("No microphone found. Connect one, then click Refresh.").small().color(DANGER));
+                            }
+                            ui.add_space(4.0);
+                            toggle(ui, &mut self.config.sounds, "Play sounds when recording starts and stops");
+                            if cfg!(windows) {
+                                toggle(ui, &mut self.config.overlay, "Show recording status on screen");
+                            }
+                        });
+                        ui.add_space(10.0);
+
+                        card(ui, |ui| {
+                            section_title(ui, "Output");
+                            toggle(ui, &mut self.config.cleanup, "Clean up transcription with AI (additional request)");
+                            if self.config.cleanup {
+                                field(ui, "Cleanup model", egui::TextEdit::singleline(&mut self.config.cleanup_model));
+                            }
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("Insert text by").color(MUTED));
+                            segmented(ui, &mut self.config.insertion, &[(Insertion::Type, "Typing"), (Insertion::Paste, "Pasting")]);
+                            ui.label(RichText::new(match self.config.insertion {
+                                Insertion::Type => "Clipboard untouched; about 100 characters per second.",
+                                Insertion::Paste => "Instant; your previous clipboard text is restored.",
+                            }).small().color(MUTED));
+                        });
+                    });
+                    ui.add_space(14.0);
+
+                    ui.label(RichText::new("Audio is sent to your configured provider. AI cleanup also sends the transcript. Provider charges and privacy policies apply.").size(13.0).color(MUTED));
+                    ui.label(RichText::new("Minimize this window to keep dictating. Closing it stops dictation. No tray icon or background autostart.").small().color(MUTED));
+                    if let Some(origin) = &self.saved_origin {
+                        ui.label(RichText::new(format!("An API key for {origin} is saved in the {}. Turn off \u{201c}Remember this key\u{201d} and enable dictation to remove it.", credential::STORE)).small().color(MUTED));
+                    }
+                    ui.label(RichText::new(&self.source).small().color(MUTED));
                 });
             });
     }
@@ -468,6 +548,10 @@ impl eframe::App for Desktop {
 
 #[cfg(test)]
 mod tests {
+    /// Taller than the default window so every settings field is on screen:
+    /// kittest clicks at a node's position, which misses scrolled-out fields.
+    const WINDOW: [f32; 2] = [620.0, 1300.0];
+
     use super::*;
     use egui::accesskit::Role;
     use egui_kittest::{Harness, kittest::Queryable};
@@ -527,7 +611,7 @@ mod tests {
             ..Config::default()
         };
         let mut harness = Harness::builder()
-            .with_size([620.0, 820.0])
+            .with_size(WINDOW)
             .build_eframe(|cc| Desktop::new(Ok(config), None, None, Ok(None), &cc.egui_ctx));
         harness.run();
         harness.get_by_label("Dictation disabled");
