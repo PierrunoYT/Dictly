@@ -15,7 +15,7 @@ pub use macos::{Shortcuts, Target, escape_down, shortcut_held, shortcut_keys_dow
 
 use crate::{
     config::Config,
-    dictation::{Color, run_controlled},
+    dictation::{Tone, run_controlled},
     pipeline::Pipeline,
     sound::{Cue, RATE, samples},
 };
@@ -128,7 +128,7 @@ impl Overlay {
         Ok(Self)
     }
 
-    pub fn show(&self, _text: &str, _color: Color, _near: Option<Target>) {}
+    pub fn show(&self, _text: &str, _tone: Tone, _near: Option<Target>) {}
 
     pub fn hide(&self) {}
 }

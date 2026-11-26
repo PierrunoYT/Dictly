@@ -43,13 +43,19 @@ pub enum Shortcut {
     Quit,
 }
 
-/// Status overlay colors.
-#[derive(Clone, Copy)]
-pub enum Color {
-    Red,
-    Amber,
-    Green,
-    Gray,
+/// What the status overlay shows; selects its icon and colors.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Tone {
+    /// Recording: a pulsing badge and a running clock.
+    Recording,
+    /// Transcribing: a spinner.
+    Working,
+    Success,
+    /// Text retained for a retry.
+    Warning,
+    Error,
+    /// Canceled.
+    Neutral,
 }
 
 /// Signals the transcription worker to skip retries and cleanup. Dropping the
@@ -112,9 +118,9 @@ impl Feedback {
         }
     }
 
-    fn show(&mut self, text: &str, color: Color, near: Option<Target>, linger: Option<Duration>) {
+    fn show(&mut self, text: &str, tone: Tone, near: Option<Target>, linger: Option<Duration>) {
         if let Some(overlay) = &self.overlay {
-            overlay.show(text, color, near);
+            overlay.show(text, tone, near);
         }
         self.hide_at = linger.map(|linger| Instant::now() + linger);
     }
@@ -187,7 +193,7 @@ pub fn run_controlled(
                     feedback.cue(Cue::Cancel);
                     feedback.show(
                         "Canceled",
-                        Color::Gray,
+                        Tone::Neutral,
                         Target::current(),
                         Some(Duration::from_secs(1)),
                     );
@@ -210,7 +216,12 @@ pub fn run_controlled(
                             ) {
                                 Ok(capture) => {
                                     feedback.cue(Cue::Start);
-                                    feedback.show("Recording…", Color::Red, Some(target), None);
+                                    feedback.show(
+                                        "Recording…",
+                                        Tone::Recording,
+                                        Some(target),
+                                        None,
+                                    );
                                     report(&format!(
                                         "Recording… ({}) Release the shortcut to finish, or after a quick tap press it again. {KEYS}+Esc discards.",
                                         capture.device
@@ -227,7 +238,7 @@ pub fn run_controlled(
                                     feedback.cue(Cue::Error);
                                     feedback.show(
                                         "Microphone unavailable",
-                                        Color::Red,
+                                        Tone::Error,
                                         Some(target),
                                         Some(Duration::from_secs(3)),
                                     );
@@ -251,7 +262,7 @@ pub fn run_controlled(
                                     recovery = None;
                                     feedback.show(
                                         "Inserted",
-                                        Color::Green,
+                                        Tone::Success,
                                         Some(target),
                                         Some(Duration::from_secs(1)),
                                     );
@@ -282,7 +293,7 @@ pub fn run_controlled(
                 *held_since = None;
                 feedback.show(
                     &format!("Recording · {KEYS}+Space to finish"),
-                    Color::Red,
+                    Tone::Recording,
                     Some(*target),
                     None,
                 );
@@ -337,7 +348,7 @@ pub fn run_controlled(
                                 recovery = None;
                                 feedback.show(
                                     "Inserted",
-                                    Color::Green,
+                                    Tone::Success,
                                     Some(target),
                                     Some(Duration::from_secs(1)),
                                 );
@@ -348,7 +359,7 @@ pub fn run_controlled(
                                 feedback.cue(Cue::Error);
                                 feedback.show(
                                     &format!("Text retained · {KEYS}+V to insert"),
-                                    Color::Amber,
+                                    Tone::Warning,
                                     Some(target),
                                     Some(Duration::from_secs(4)),
                                 );
@@ -362,7 +373,7 @@ pub fn run_controlled(
                         feedback.cue(Cue::Error);
                         feedback.show(
                             "Transcription failed",
-                            Color::Red,
+                            Tone::Error,
                             Some(target),
                             Some(Duration::from_secs(3)),
                         );
@@ -410,13 +421,13 @@ fn finish_recording(
                 let _ =
                     tx.send(pipeline.transcribe_cancelable(wav, "dictation.wav", &worker_canceled));
             });
-            feedback.show("Transcribing…", Color::Amber, Some(target), None);
+            feedback.show("Transcribing…", Tone::Working, Some(target), None);
             report("Transcribing…");
         }
         Err(error) => {
             feedback.show(
                 "Recording discarded",
-                Color::Red,
+                Tone::Error,
                 Some(target),
                 Some(Duration::from_secs(3)),
             );

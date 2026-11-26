@@ -46,8 +46,8 @@ Everything else (hold-to-talk, tap-to-toggle, cancel, recovery, focus checks, ty
 ## Dictate into an application
 
 1. Enable dictation in Dictly, then open a normal, non-administrator Notepad window and focus its editing area.
-2. Hold **Ctrl+Alt+Space**. A rising tone plays and a red **Recording** pill appears above the taskbar.
-3. Speak while holding the shortcut, then release it. A falling tone plays and the pill shows **Transcribing…**.
+2. Hold **Ctrl+Alt+Space**. A rising tone plays and a pill with a red microphone and a running clock appears above the taskbar.
+3. Speak while holding the shortcut, then release it. A falling tone plays and the pill shows **Transcribing…** with a spinner. A green check means the text was inserted, an amber **!** that it was retained for **Ctrl+Alt+V**, a red pill that something failed, and a gray cross that you canceled.
 4. Wait for transcription and insertion. Do not move the caret, switch fields, or type while processing.
 5. Review the inserted text, especially names, numbers, and any AI corrections.
 
