@@ -2,16 +2,16 @@
 
 <h1 align="center">Dictly</h1>
 
-**Speak, then insert text where you work.** Dictly is a Windows desktop dictation app built with Rust. Double-click `dictly.exe` to configure your provider and enable dictation. Hold a global shortcut while you speak, or tap it to start and stop, and Dictly inserts the transcript into the focused application. Optional AI cleanup asks the model to remove fillers and handle spoken corrections.
+**Speak, then insert text where you work.** Dictly is a desktop dictation app for Windows, macOS, and Linux (X11), built with Rust. Open it to configure your provider and enable dictation. Hold a global shortcut while you speak, or tap it to start and stop, and Dictly inserts the transcript into the focused application. Optional AI cleanup asks the model to remove fillers and handle spoken corrections.
 
-**Status: 0.1.0 MVP with unreleased desktop UI.** The native Windows x64 build, 12 contract tests, and 2 Windows unit tests pass. A [Windows end-to-end harness](docs/development.md#windows-end-to-end-harness) drives the real executable with global shortcuts. It passed 13 scenarios, including insertion into Notepad and one dictation through OpenAI. Live microphone capture is still unverified, because the test machine had no connected microphone; the harness replayed recorded audio instead. File transcription through [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), with and without cleanup, was checked against the live gateway on Linux, macOS, and the Windows executable under Wine. No new public release or installer has been published.
+**Status: 0.1.0 MVP with unreleased desktop UI.** The native Windows x64 build, 12 contract tests, and 2 Windows unit tests pass. A [Windows end-to-end harness](docs/development.md#windows-end-to-end-harness) drives the real executable with global shortcuts. It passed 13 scenarios, including insertion into Notepad and one dictation through OpenAI. Live microphone capture is still unverified, because the test machine had no connected microphone; the harness replayed recorded audio instead. File transcription through [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), with and without cleanup, was checked against the live gateway on Linux, macOS, and the Windows executable under Wine. Live dictation on macOS and Linux X11 passed scripted end-to-end runs with real shortcuts, typing and pasting into another app, and the live gateway, using replayed audio; it has not been tried with a real microphone or by hand. No new public release or installer has been published.
 
 This is an independent implementation inspired by Wispr Flow's public behavior, not its proprietary source, private APIs, branding, or model weights. It is not affiliated with Wispr Flow or feature-equivalent to it.
 
 ## Features
 
 - Desktop window with provider settings, a masked API key, enable/disable controls, status, and errors.
-- Settings saved beside the executable; optional API-key storage in Windows Credential Manager.
+- Settings saved beside the executable; optional API-key storage in Windows Credential Manager, the macOS Keychain, or a Linux Secret Service keyring.
 - Hold-to-talk or tap-to-toggle recording, plus cancel and transcript-recovery shortcuts.
 - Start/stop sounds and an always-on-top status overlay that never takes focus.
 - Microphone picker; falls back to the first available microphone when Windows has no default.
@@ -22,7 +22,7 @@ This is an independent implementation inspired by Wispr Flow's public behavior, 
 - One automatic retry after rate limiting, a transient server error, or a failed connection.
 - Text insertion by paced typing (the clipboard is untouched) or optional pasting (the previous clipboard text is restored).
 - Best-effort focus checks and explicit retry when insertion is skipped.
-- Existing-audio-file transcription and configuration checks on Windows, Linux, and macOS.
+- Windows, macOS, and Linux (X11 sessions; Wayland is not supported). macOS uses Control+Option instead of Ctrl+Alt; the on-screen status pill is Windows-only. See [macOS and Linux](docs/usage.md#macos-and-linux).
 
 No tray app, installer, configurable shortcuts, or offline model is included. See [limitations and privacy](docs/usage.md#privacy-and-limitations) before dictating sensitive content.
 
@@ -32,7 +32,7 @@ Use Windows 10/11 x64. [Build from source](#build-from-source) to get the curren
 
 1. Double-click **`dictly.exe`**. No terminal or command-line arguments are needed.
 2. Review the **Provider URL** and **Transcription model**. The defaults use OpenAI. For [Vercel AI Gateway](docs/configuration.md#vercel-ai-gateway), enter `https://ai-gateway.vercel.sh/v1` and a model such as `openai/gpt-4o-mini-transcribe`.
-3. Paste your provider's key into **API key**. It is masked. Check **Remember this key on this PC** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can use the unchecked **Provider requires an API key** option.
+3. Paste your provider's key into **API key**. It is masked. Check **Remember this key on this computer** to keep it in Windows Credential Manager; otherwise it is used for this session only. A compatible local server without authentication can use the unchecked **Provider requires an API key** option.
 4. Optionally set a language such as `de` or `en`, enable AI cleanup, choose a microphone, or switch insertion to pasting.
 5. Click **Enable dictation**, wait for **Ready**, then focus a text field in another app and use the shortcuts below.
 
@@ -49,6 +49,10 @@ Allow desktop microphone access in Windows privacy settings. Focus Notepad, hold
 | Ctrl+Alt+V | Retry insertion of retained text into the current field |
 
 Minimize Dictly to keep dictating. **Disable dictation** releases the shortcuts and discards pending insertion and retained text; closing the window exits. Only one Dictly can run at a time. There is no tray icon. Cancellation stops retries and cleanup, but cannot retract an API request already underway.
+
+## Quick start: macOS and Linux
+
+[Build from source](docs/development.md#macos-and-linux-builds), then run `target/release/dictly` and follow the same steps. On macOS, allow your terminal (or the app that starts Dictly) under Accessibility and Microphone in System Settings › Privacy & Security, and use **Control+Option** instead of Ctrl+Alt. On Linux, use an X11 session.
 
 ## Build from source
 

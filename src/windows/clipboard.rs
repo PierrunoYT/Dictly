@@ -109,10 +109,11 @@ pub fn save() -> Result<Option<Saved>> {
     }
 }
 
-/// Replace the clipboard with `units`. Private text is marked so Windows
+/// Replace the clipboard with `text`. Private text is marked so Windows
 /// clipboard history, cloud sync, and clipboard monitors skip it.
-pub fn set(units: &[u16], private: bool) -> Result<()> {
-    write(units, None, private)
+pub fn set(text: &str, private: bool) -> Result<()> {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    write(&units, None, private)
 }
 
 fn write(units: &[u16], locale: Option<u32>, private: bool) -> Result<()> {

@@ -6,6 +6,20 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+#[cfg(windows)]
+const SOUND_SETTINGS: &str = "Windows Sound settings";
+#[cfg(target_os = "macos")]
+const SOUND_SETTINGS: &str = "System Settings › Sound › Input";
+#[cfg(target_os = "linux")]
+const SOUND_SETTINGS: &str = "your system's sound settings";
+#[cfg(windows)]
+const MICROPHONE_PERMISSION: &str = "Windows microphone privacy permissions";
+#[cfg(target_os = "macos")]
+const MICROPHONE_PERMISSION: &str =
+    "System Settings › Privacy & Security › Microphone for the app that started Dictly";
+#[cfg(target_os = "linux")]
+const MICROPHONE_PERMISSION: &str = "that the microphone is not in use or muted";
+
 pub struct Capture {
     /// None when a test build reads audio from a file instead of a device.
     stream: Option<cpal::Stream>,
@@ -16,7 +30,7 @@ pub struct Capture {
     pub device: String,
 }
 
-/// Names of the input devices Windows currently offers.
+/// Names of the input devices the OS currently offers.
 pub fn microphones() -> Vec<String> {
     cpal::default_host()
         .input_devices()
@@ -24,7 +38,7 @@ pub fn microphones() -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// The named device, else the Windows default, else the first available input:
+/// The named device, else the system default, else the first available input:
 /// Windows can report no default while a usable microphone is connected.
 fn select_device(name: Option<&str>) -> Result<cpal::Device> {
     let host = cpal::default_host();
@@ -33,12 +47,12 @@ fn select_device(name: Option<&str>) -> Result<cpal::Device> {
             .input_devices()?
             .find(|device| device.name().is_ok_and(|device| device == name))
             .with_context(|| {
-                format!("Microphone \"{name}\" is not connected. Choose another in Dictly or Windows Sound settings.")
+                format!("Microphone \"{name}\" is not connected. Choose another in Dictly or {SOUND_SETTINGS}.")
             });
     }
     host.default_input_device()
         .or_else(|| host.input_devices().ok()?.next())
-        .context("No microphone found. Connect one and check Windows Sound settings.")
+        .with_context(|| format!("No microphone found. Connect one and check {SOUND_SETTINGS}."))
 }
 
 impl Capture {
@@ -55,7 +69,7 @@ impl Capture {
         let candidates = candidate_configs(&device);
         ensure!(
             !candidates.is_empty(),
-            "Cannot open microphone. Check Windows microphone privacy permissions."
+            "Cannot open microphone. Check {MICROPHONE_PERMISSION}."
         );
         let mut last_error = None;
         for supported in candidates {
@@ -65,7 +79,7 @@ impl Capture {
             }
         }
         Err(last_error.unwrap_or_else(|| {
-            anyhow::anyhow!("Cannot open microphone. Check Windows microphone privacy permissions.")
+            anyhow::anyhow!("Cannot open microphone. Check {MICROPHONE_PERMISSION}.")
         }))
     }
 
@@ -161,7 +175,7 @@ impl Capture {
 
 /// Capture configurations to try, best first: 16 kHz mono when the hardware
 /// offers it, then the device default. Echo cancellation, noise suppression,
-/// and auto gain stay at the Windows defaults; cpal exposes no control over
+/// and auto gain stay at the OS defaults; cpal exposes no control over
 /// them, so they are left to the OS rather than silently assumed off.
 fn candidate_configs(device: &cpal::Device) -> Vec<cpal::SupportedStreamConfig> {
     const TARGET_RATE: u32 = 16_000;

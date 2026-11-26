@@ -6,6 +6,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Added
 
+- Live dictation, the desktop window, and saved API keys on macOS and Linux (X11). macOS uses Control+Option shortcuts and the Keychain, and needs Accessibility access; Linux uses Ctrl+Alt and a Secret Service keyring. The status overlay stays Windows-only. Wayland is not supported.
 - Vercel AI Gateway as a provider: with `base_url = "https://ai-gateway.vercel.sh/v1"`, transcription uses the gateway's base64 JSON endpoint and cleanup its chat completions.
 - Continuous integration on GitHub Actions: `cargo fmt --check`, strict Clippy with and without `test-audio`, debug and release tests on Windows, and `cargo deny` / `cargo audit` with a committed `deny.toml`. Unsafe blocks without a `// SAFETY:` comment now fail the build.
 - Hold-to-talk: holding Ctrl+Alt+Space for at least half a second records until release. A quick tap still toggles recording.

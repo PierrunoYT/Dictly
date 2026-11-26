@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Checking Linux cross-build prerequisites"
-if ! command -v x86_64-w64-mingw32-gcc >/dev/null; then
+echo "Checking Linux build and cross-build prerequisites"
+# ALSA headers build microphone capture; xkbcommon-x11 and EGL run the window;
+# Xvfb lets the desktop tests and live dictation run without a monitor.
+packages="gcc-mingw-w64-x86-64-posix pkg-config libasound2-dev libxkbcommon-x11-0 libegl1 xvfb"
+missing=""
+for package in $packages; do
+    dpkg -s "$package" >/dev/null 2>&1 || missing="$missing $package"
+done
+if [ -n "$missing" ]; then
     sudo apt-get update -qq
-    sudo apt-get install -y -qq gcc-mingw-w64-x86-64-posix
+    # shellcheck disable=SC2086
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing
 fi
 
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -20,4 +28,4 @@ echo "Preparing Rust targets and dependencies"
 rustup component add clippy rustfmt
 rustup target add x86_64-pc-windows-gnu
 cargo fetch --locked --target x86_64-unknown-linux-gnu --target x86_64-pc-windows-gnu
-echo "Ready: cargo test --locked; cargo build --release --locked --target x86_64-pc-windows-gnu"
+echo "Ready: xvfb-run -a cargo test --locked; cargo build --release --locked --target x86_64-pc-windows-gnu"

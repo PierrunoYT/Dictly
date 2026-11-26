@@ -1,7 +1,9 @@
 use crate::{
+    capture::microphones,
     config::{Config, Insertion},
+    dictation,
     pipeline::Pipeline,
-    windows,
+    platform::{self, credential},
 };
 use anyhow::{Context, Result};
 use eframe::egui::{self, Color32, RichText};
@@ -21,7 +23,7 @@ use std::{
 const SHUTDOWN_WAIT: Duration = Duration::from_secs(1);
 
 pub fn run(config_path: Option<PathBuf>) -> Result<()> {
-    let _instance = windows::SingleInstance::acquire()?;
+    let _instance = platform::SingleInstance::acquire()?;
     let beside_exe = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|dir| dir.join("config.toml")));
@@ -35,8 +37,8 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
         |_| Config::default().base_url,
         |config| config.base_url.clone(),
     );
-    let saved_key = match windows::credential::origin(shown_url.trim()) {
-        Some(origin) => windows::credential::load(&origin),
+    let saved_key = match credential::origin(shown_url.trim()) {
+        Some(origin) => credential::load(&origin),
         None => Ok(None),
     };
     let options = eframe::NativeOptions {
@@ -80,9 +82,9 @@ struct Desktop {
     language: String,
     api_key: String,
     authenticated: bool,
-    /// Store the typed key in Windows Credential Manager when enabling.
+    /// Store the typed key in the OS key store when enabling.
     remember_key: bool,
-    /// Provider origin whose key is known to be saved in Credential Manager.
+    /// Provider origin whose key is known to be saved in the OS key store.
     saved_origin: Option<String>,
     /// Origin of the saved key prefilled into `api_key`, until the key is
     /// edited. The key is cleared when the provider URL leaves that origin.
@@ -143,7 +145,7 @@ impl Desktop {
         });
         let saved_origin = saved_key
             .as_ref()
-            .and_then(|_| windows::credential::origin(config.base_url.trim()));
+            .and_then(|_| credential::origin(config.base_url.trim()));
         Self {
             source: match &save_path {
                 Some(save) => format!(
@@ -160,7 +162,7 @@ impl Desktop {
             prefilled_origin: saved_origin.clone(),
             saved_origin,
             api_key: saved_key.unwrap_or_default(),
-            microphones: windows::microphones(),
+            microphones: microphones(),
             worker: None,
             ready: false,
             status:
@@ -174,7 +176,7 @@ impl Desktop {
     /// so the key is never sent to a provider it was not saved for.
     fn provider_changed(&mut self) {
         if let Some(prefilled) = &self.prefilled_origin
-            && windows::credential::origin(self.config.base_url.trim()).as_ref() != Some(prefilled)
+            && credential::origin(self.config.base_url.trim()).as_ref() != Some(prefilled)
         {
             self.api_key.clear();
             self.prefilled_origin = None;
@@ -208,7 +210,7 @@ impl Desktop {
             self.error = Some(format!("{error:#}"));
             return;
         }
-        let Some(origin) = windows::credential::origin(&config.base_url) else {
+        let Some(origin) = credential::origin(&config.base_url) else {
             self.error = Some("base_url must be an HTTP or HTTPS URL".into());
             return;
         };
@@ -226,13 +228,13 @@ impl Desktop {
             problems.push(format!("{error:#}"));
         }
         match (&key, self.remember_key) {
-            (Some(key), true) => match windows::credential::save(&origin, key) {
+            (Some(key), true) => match credential::save(&origin, key) {
                 Ok(()) => self.saved_origin = Some(origin),
                 Err(error) => problems.push(format!("{error:#}")),
             },
             (_, false) => {
                 if let Some(saved) = self.saved_origin.take()
-                    && let Err(error) = windows::credential::delete(&saved)
+                    && let Err(error) = credential::delete(&saved)
                 {
                     problems.push(format!("{error:#}"));
                     self.saved_origin = Some(saved);
@@ -256,7 +258,7 @@ impl Desktop {
                 .context(
                     "Could not enable dictation. Enter an API key or check your provider settings",
                 )?;
-                windows::run_controlled(config, pipeline, &signal, |message| {
+                dictation::run_controlled(config, pipeline, &signal, |message| {
                     let _ = tx.send(Event::Status(message.to_owned()));
                     ctx.request_repaint();
                 })
@@ -382,10 +384,10 @@ impl eframe::App for Desktop {
                                 .hint_text("Paste your API key here").desired_width(f32::INFINITY)).labelled_by(label.id).changed() {
                                 self.prefilled_origin = None;
                             }
-                            ui.checkbox(&mut self.remember_key, "Remember this key on this PC (Windows Credential Manager)");
+                            ui.checkbox(&mut self.remember_key, format!("Remember this key on this computer ({})", credential::STORE));
                             let env = if self.config.api_key_env.is_empty() { "OPENAI_API_KEY" } else { &self.config.api_key_env };
                             ui.small(if self.remember_key {
-                                "Saved for this provider and your Windows account when you enable dictation; never written to the settings file.".to_owned()
+                                "Saved for this provider and your user account when you enable dictation; never written to the settings file.".to_owned()
                             } else {
                                 format!("Used for this session only. Leave blank to use {env} from the environment.")
                             });
@@ -401,7 +403,7 @@ impl eframe::App for Desktop {
                         let label = ui.label("Microphone");
                         ui.horizontal(|ui| {
                             let selected = match &self.config.microphone {
-                                None => "Windows default".to_owned(),
+                                None => "System default".to_owned(),
                                 Some(name) if self.microphones.contains(name) => name.clone(),
                                 Some(name) => format!("{name} (not connected)"),
                             };
@@ -409,7 +411,7 @@ impl eframe::App for Desktop {
                                 .selected_text(selected)
                                 .width(ui.available_width() - 90.0)
                                 .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut self.config.microphone, None, "Windows default");
+                                    ui.selectable_value(&mut self.config.microphone, None, "System default");
                                     for name in &self.microphones {
                                         ui.selectable_value(&mut self.config.microphone, Some(name.clone()), name);
                                     }
@@ -417,14 +419,16 @@ impl eframe::App for Desktop {
                                 .response
                                 .labelled_by(label.id);
                             if ui.button("Refresh").clicked() {
-                                self.microphones = windows::microphones();
+                                self.microphones = microphones();
                             }
                         });
                         if self.microphones.is_empty() {
                             ui.small("No microphone found. Connect one, then click Refresh.");
                         }
                         ui.checkbox(&mut self.config.sounds, "Play sounds when recording starts and stops");
-                        ui.checkbox(&mut self.config.overlay, "Show recording status on screen");
+                        if cfg!(windows) {
+                            ui.checkbox(&mut self.config.overlay, "Show recording status on screen");
+                        }
                         ui.label("Insert text by");
                         ui.radio_value(&mut self.config.insertion, Insertion::Type, "Typing: clipboard untouched; about 100 characters per second");
                         ui.radio_value(&mut self.config.insertion, Insertion::Paste, "Pasting: instant; previous clipboard text is restored");
@@ -435,12 +439,13 @@ impl eframe::App for Desktop {
                         ui.strong("Dictate in another app");
                         ui.label("Enable dictation, then focus the text field where you want to write.");
                         egui::Grid::new("shortcuts").spacing([24.0, 8.0]).show(ui, |ui| {
+                            let keys = platform::KEYS.replace('+', " + ");
                             for (key, action) in [
-                                ("Ctrl + Alt + Space", "Hold to talk, or tap to start / finish"),
-                                ("Ctrl + Alt + Esc", "Cancel / clear retained text"),
-                                ("Ctrl + Alt + V", "Retry retained text insertion"),
+                                ("Space", "Hold to talk, or tap to start / finish"),
+                                ("Esc", "Cancel / clear retained text"),
+                                ("V", "Retry retained text insertion"),
                             ] {
-                                ui.label(RichText::new(key).strong());
+                                ui.label(RichText::new(format!("{keys} + {key}")).strong());
                                 ui.label(action);
                                 ui.end_row();
                             }
@@ -449,7 +454,7 @@ impl eframe::App for Desktop {
                     ui.label("Audio is sent to your configured provider. AI cleanup also sends the transcript. Provider charges and privacy policies apply.");
                     ui.small("Minimize this window to keep dictating. Closing it stops dictation. No tray icon or background autostart.");
                     if let Some(origin) = &self.saved_origin {
-                        ui.small(format!("An API key for {origin} is saved in Windows Credential Manager. Uncheck \u{201c}Remember this key\u{201d} and enable dictation to remove it."));
+                        ui.small(format!("An API key for {origin} is saved in the {}. Uncheck \u{201c}Remember this key\u{201d} and enable dictation to remove it.", credential::STORE));
                     }
                     ui.small(&self.source);
                 });
@@ -479,7 +484,7 @@ mod tests {
         static AUDIO: LazyLock<()> = LazyLock::new(|| {
             let (ready, wait) = mpsc::channel();
             thread::spawn(move || {
-                windows::microphones();
+                microphones();
                 ready.send(()).unwrap();
                 loop {
                     thread::park();

@@ -13,7 +13,7 @@ use std::{
 #[derive(Parser)]
 #[command(
     version,
-    about = "Dictly desktop dictation. Launch without a command to open the Windows app."
+    about = "Dictly desktop dictation. Launch without a command to open the desktop app."
 )]
 struct Args {
     /// TOML configuration file (desktop also checks beside the executable).
@@ -25,13 +25,13 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Start Windows dictation: Ctrl+Alt+Space toggles, Ctrl+Alt+Esc cancels.
+    /// Start console dictation: Ctrl+Alt+Space (Control+Option+Space on macOS) toggles.
     Run,
     /// Transcribe an existing audio file and write text to stdout.
     Transcribe { file: PathBuf },
     /// Validate configuration without recording audio or contacting a provider.
     Check,
-    /// List microphone names for the `microphone` setting (Windows).
+    /// List microphone names for the `microphone` setting.
     Devices,
 }
 
@@ -80,10 +80,7 @@ fn main() -> ExitCode {
 
 fn execute(args: Args) -> Result<()> {
     let Some(command) = args.command else {
-        #[cfg(windows)]
         return dictly::desktop::run(args.config);
-        #[cfg(not(windows))]
-        anyhow::bail!("The desktop app requires Windows. Use transcribe or check on this OS.");
     };
     let config = Config::load(args.config.as_deref())?;
     match command {
@@ -115,18 +112,12 @@ fn execute(args: Args) -> Result<()> {
             }
         }
         Command::Devices => {
-            #[cfg(windows)]
-            for name in dictly::windows::microphones() {
+            for name in dictly::capture::microphones() {
                 println!("{name}");
             }
-            #[cfg(not(windows))]
-            anyhow::bail!("Microphone listing requires Windows.");
         }
         Command::Run => {
-            #[cfg(windows)]
-            dictly::windows::run(config)?;
-            #[cfg(not(windows))]
-            anyhow::bail!("Live dictation requires Windows. Use transcribe or check on this OS.");
+            dictly::platform::run(config)?;
         }
     }
     Ok(())

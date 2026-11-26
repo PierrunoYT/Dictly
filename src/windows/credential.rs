@@ -18,13 +18,9 @@ use windows_sys::Win32::{
 /// removed so it cannot linger without a provider.
 const LEGACY_TARGET: &str = "Dictly/API key";
 
-/// The provider origin a key is bound to, such as `https://api.openai.com`:
-/// scheme, host, and non-default port of `base_url`, without path or case
-/// differences. `None` for anything but an HTTP(S) URL.
-pub fn origin(base_url: &str) -> Option<String> {
-    let url = reqwest::Url::parse(base_url).ok()?;
-    matches!(url.scheme(), "http" | "https").then(|| url.origin().ascii_serialization())
-}
+pub use crate::config::provider_origin as origin;
+
+pub const STORE: &str = "Windows Credential Manager";
 
 /// Credential Manager target name for the key of one provider origin.
 fn target(origin: &str) -> String {

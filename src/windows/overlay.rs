@@ -2,7 +2,8 @@
 //! It never activates, takes keyboard focus, or receives mouse input, so the
 //! focus checks that protect insertion are unaffected.
 
-use super::wide;
+use super::{Target, wide};
+use crate::dictation::Color;
 use anyhow::{Result, ensure};
 use std::{cell::RefCell, mem::zeroed, ptr::null};
 use windows_sys::Win32::{
@@ -28,10 +29,10 @@ use windows_sys::Win32::{
 const WIDTH: i32 = 340;
 const HEIGHT: i32 = 40;
 
-pub const RED: COLORREF = rgb(235, 72, 72);
-pub const AMBER: COLORREF = rgb(245, 182, 66);
-pub const GREEN: COLORREF = rgb(76, 201, 120);
-pub const GRAY: COLORREF = rgb(150, 156, 168);
+const RED: COLORREF = rgb(235, 72, 72);
+const AMBER: COLORREF = rgb(245, 182, 66);
+const GREEN: COLORREF = rgb(76, 201, 120);
+const GRAY: COLORREF = rgb(150, 156, 168);
 
 const fn rgb(red: u8, green: u8, blue: u8) -> COLORREF {
     red as u32 | (green as u32) << 8 | (blue as u32) << 16
@@ -86,8 +87,16 @@ impl Overlay {
         }
     }
 
-    /// Show `text` with a colored dot, centered above the taskbar on `near`'s monitor.
-    pub fn show(&self, text: &str, color: COLORREF, near: HWND) {
+    /// Show `text` with a colored dot, centered above the taskbar on `near`'s
+    /// monitor, or on the primary monitor without a target.
+    pub fn show(&self, text: &str, color: Color, near: Option<Target>) {
+        let color = match color {
+            Color::Red => RED,
+            Color::Amber => AMBER,
+            Color::Green => GREEN,
+            Color::Gray => GRAY,
+        };
+        let near = near.map_or(std::ptr::null_mut(), |target| target.window);
         // SAFETY: handles are only passed to Windows; info has the required size.
         unsafe {
             let monitor = MonitorFromWindow(near, MONITOR_DEFAULTTOPRIMARY);

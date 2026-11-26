@@ -23,7 +23,7 @@ The package rename produces `target\release\dictly.exe`; Cargo may leave an old 
 
 ## Linux development and Windows cross-build
 
-Linux and macOS can run the file-transcription and configuration commands, but `run` deliberately fails outside Windows. File transcription through Vercel AI Gateway and `cargo test` were checked on Linux and macOS 27; the cross-built Windows executable was also run under Wine, where the desktop test that registers global shortcuts fails because Wine has no interactive desktop.
+See [macOS and Linux builds](#macos-and-linux-builds) for native builds there. The cross-built Windows executable was also run under Wine, where the desktop test that registers global shortcuts fails because Wine has no interactive desktop.
 
 On a Debian-based Linux development machine, install stable Rust and the MinGW cross-linker:
 
@@ -62,6 +62,23 @@ The 16 integration tests in `tests/contracts.rs` cover several areas. Audio: in-
 On Windows, unit tests in `src/windows/credential.rs` save, replace, read, and delete throwaway Credential Manager entries (`Dictly/test credential <pid>` and `Dictly/test empty credential <pid>`), including an entry with an empty secret; they never touch a real saved key. They also check that saved keys are bound to the provider origin (scheme, host, and port). The egui accessibility tests in `src/desktop.rs` click controls and type into fields to check missing-key errors, invalid language settings, enabling/disabling dictation, re-enabling after shortcut release, that a failed configuration load is not reported as loaded and enabling afterwards leaves the file unchanged, that a filled-in saved key is cleared when the provider URL moves to another origin, and that closing waits for a stopping worker. Close other running Dictly dictation sessions before running them: the tests reserve the real global shortcuts briefly (one test at a time), but do not record or submit audio. Default, enabled/cleanup, and missing-credential native windows were also rendered and inspected locally.
 
 A passing API test confirms transport and response handling, **not** transcription accuracy, model adherence to cleanup instructions, or dictation in a Windows application. The existing Linux CLI smoke check also confirmed exact Unicode stdout through a local HTTP fixture. Cross-compilation only confirms that Windows code compiles and links.
+
+## macOS and Linux builds
+
+Install stable Rust with rustup. On macOS, install the Xcode command-line tools. On Debian or Ubuntu, install the ALSA headers for microphone capture and the libraries the window loads at run time:
+
+```sh
+sudo apt-get install pkg-config libasound2-dev libxkbcommon-x11-0 libegl1 xvfb
+cargo build --release --locked
+cargo clippy --all-targets --locked -- -D warnings
+xvfb-run -a cargo test --locked   # Linux; on macOS run cargo test --locked
+```
+
+The desktop test enables dictation, which grabs the X11 shortcuts, so Linux tests need a display; `xvfb-run` provides one. CI runs these on `ubuntu-latest` and `macos-latest`.
+
+Code layout: `src/dictation.rs` is the shared recording, transcription, and insertion state machine. `src/windows/` and `src/unix/` supply shortcuts, focus tracking, key state, typing, the clipboard, saved keys, and sounds. `src/unix/macos.rs` reads shortcuts with a Quartz event tap; `src/unix/x11.rs` grabs them on the X11 root window. Typing uses `enigo`, the clipboard `arboard`, and saved keys `keyring`.
+
+Live dictation was checked end to end on Linux (Xvfb with Openbox, a Tk text window) and macOS 27 (a native AppKit text window), with the `test-audio` build replaying a WAV, shortcuts sent as real key events (XTEST, or Quartz HID events on macOS), and transcription through Vercel AI Gateway. Each passed hold-to-talk, tap-to-toggle, cancel, focus change with retained text and recovery, single instance, and both typing and paste insertion (clipboard restored; typing never touched it). Saving, reading, and deleting a key was checked against GNOME Keyring and a macOS keychain. Not yet checked: a real microphone, a hand-driven session, Wayland (unsupported), and other apps such as browsers and terminals.
 
 ## Windows end-to-end harness
 

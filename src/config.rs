@@ -2,7 +2,15 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, path::Path};
 
-/// How Windows dictation inserts text into the focused field.
+/// The provider origin a saved API key is bound to, such as
+/// `https://api.openai.com`: scheme, host, and non-default port of `base_url`,
+/// without path or case differences. `None` for anything but an HTTP(S) URL.
+pub fn provider_origin(base_url: &str) -> Option<String> {
+    let url = reqwest::Url::parse(base_url).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.origin().ascii_serialization())
+}
+
+/// How dictation inserts text into the focused field.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Insertion {

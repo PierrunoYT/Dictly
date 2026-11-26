@@ -24,6 +24,28 @@ jobs:
       - run: cargo test --locked
       - run: cargo test --locked --release
 
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libxkbcommon-x11-0 libegl1 xvfb
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo clippy --all-targets --locked --features test-audio -- -D warnings
+      # The desktop test enables dictation, which grabs X11 shortcuts on Linux.
+      - if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test --locked
+      - if: runner.os == 'macOS'
+        run: cargo test --locked
+
   supply-chain:
     runs-on: ubuntu-latest
     steps:
