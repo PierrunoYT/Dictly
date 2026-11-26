@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/dictly-logo.png" alt="Dictly logo: a blue speech bubble with a sound wave turning into lines of text" width="160"></p>
+<p align="center"><img src="assets/dictly-logo.png" alt="Dictly logo: a blue-to-violet microphone combined with a sound wave and text cursor" width="160"></p>
 
 <h1 align="center">Dictly</h1>
 

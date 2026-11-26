@@ -21,6 +21,8 @@ These commands build and validate configuration without uploading audio. Double-
 
 The package rename produces `target\release\dictly.exe`; Cargo may leave an old `rust-dictate.exe` in the build directory. Use the new path rather than assuming the old executable was updated. The local build does not create a ZIP, checksum manifest, installer, or published release.
 
+`build.rs` embeds `assets/dictly.ico` as the executable icon when targeting Windows (via `winresource`); the desktop window icon comes from `assets/dictly-logo.png`. Regenerate the `.ico` from the PNG whenever the logo changes.
+
 ## Linux development and Windows cross-build
 
 See [macOS and Linux builds](#macos-and-linux-builds) for native builds there. The cross-built Windows executable was also run under Wine, where the desktop test that registers global shortcuts fails because Wine has no interactive desktop.

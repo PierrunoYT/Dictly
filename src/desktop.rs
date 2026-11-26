@@ -45,7 +45,11 @@ pub fn run(config_path: Option<PathBuf>) -> Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title("Dictly")
             .with_inner_size([620.0, 820.0])
-            .with_min_inner_size([440.0, 540.0]),
+            .with_min_inner_size([440.0, 540.0])
+            .with_icon(
+                eframe::icon_data::from_png_bytes(include_bytes!("../assets/dictly-logo.png"))
+                    .expect("embedded logo is a valid PNG"),
+            ),
         ..Default::default()
     };
     eframe::run_native(
