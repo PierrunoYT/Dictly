@@ -8,6 +8,7 @@ use x11rb::{
     connection::Connection,
     protocol::{
         Event,
+        xinput::{self, ConnectionExt as _},
         xproto::{
             Atom, AtomEnum, ConnectionExt, GrabMode, Keycode, Keysym, ModMask, Timestamp, Window,
         },
@@ -208,6 +209,9 @@ pub struct Shortcuts {
     released: Vec<(Keycode, Timestamp)>,
     down: Vec<Keycode>,
     unavailable: Vec<&'static str>,
+    /// Esc's keycode when another app owns Ctrl+Alt+Esc: raw key events then
+    /// report every plain Esc press without taking Esc from other apps.
+    escape: Option<Keycode>,
 }
 
 /// Grabs must also match with Caps Lock and Num Lock (Mod2) on.
@@ -232,6 +236,7 @@ impl Shortcuts {
             released: vec![],
             down: vec![],
             unavailable: vec![],
+            escape: None,
         };
         for (keysym, shortcut, name) in [
             (XK_SPACE, Shortcut::Toggle, "Space"),
@@ -276,8 +281,27 @@ impl Shortcuts {
                 );
             }
             shortcuts.unavailable.push(name);
+            if shortcut == Shortcut::Cancel {
+                shortcuts.escape = shortcuts.select_raw_key_presses().ok().map(|()| code);
+            }
         }
         Ok(shortcuts)
+    }
+
+    /// Raw key presses of every master keyboard, delivered to the root
+    /// window whichever window has focus (XInput 2.1 and later).
+    fn select_raw_key_presses(&self) -> Result<()> {
+        self.connection.xinput_xi_query_version(2, 2)?.reply()?;
+        self.connection
+            .xinput_xi_select_events(
+                self.root,
+                &[xinput::EventMask {
+                    deviceid: xinput::Device::ALL_MASTER.into(),
+                    mask: vec![xinput::XIEventMask::RAW_KEY_PRESS],
+                }],
+            )?
+            .check()?;
+        Ok(())
     }
 
     /// Shortcut keys ("Esc", "V") another app owns, so they do nothing.
@@ -307,6 +331,14 @@ impl Shortcuts {
                     if !repeat {
                         return Some(shortcut);
                     }
+                }
+                Event::XinputRawKeyPress(press)
+                    if Some(press.detail) == self.escape.map(u32::from)
+                        && u32::from(press.flags)
+                            & u32::from(xinput::KeyEventFlags::KEY_REPEAT)
+                            == 0 =>
+                {
+                    return Some(Shortcut::Escape);
                 }
                 Event::KeyRelease(release) => {
                     self.down.retain(|&code| code != release.detail);

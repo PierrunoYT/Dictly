@@ -50,6 +50,7 @@ User-visible changes to Dictly. Versions match `Cargo.toml`. Local build entries
 
 ### Fixed
 
+- On X11, the plain-Esc cancel used when another app owns Ctrl+Alt+Esc missed quick taps, because Dictly sampled the key state every 15 ms. It now listens for XInput 2 raw key presses, which catch every Esc press without taking Esc from other apps. The startup line also names Esc as the cancel key in that case.
 - Typed insertion into Windows 11 Notepad arrived as one character repeated, such as `plain ssss…`, because Notepad reads the most recent injected character when it processes each keystroke. Dictly now types one character at a time, about 100 per second, and stops cleanly if focus changes or Esc is pressed mid-insertion.
 - Updated `rustls-webpki` to 0.103.17 and `webpki-roots` to 1.0.12 for TLS certificate-verification advisories RUSTSEC-2026-0382 and RUSTSEC-2026-0381, and replaced the yanked `clipboard-win` 5.4.1 with 5.4.3.
 - Updated `url` to 2.5.9 for RUSTSEC-2026-0592, `rustix` to 1.1.6 for the unsound advisory RUSTSEC-2026-0486, and replaced the yanked `async-executor` 1.14.0 with 1.14.1.

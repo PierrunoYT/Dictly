@@ -40,6 +40,9 @@ pub enum Shortcut {
     Cancel,
     /// Modifiers + V: insert retained text.
     Recover,
+    /// Plain Esc, reported only when another app owns Modifiers + Esc. It
+    /// cancels while recording or transcribing and is ignored otherwise.
+    Escape,
     Quit,
 }
 
@@ -158,16 +161,20 @@ pub fn run_controlled(
     let mut state = State::Idle;
     let mut recovery: Option<String> = None;
     let mut feedback = Feedback::new(&config, &report);
+    // A cancel shortcut another app owns (Xfce and KDE bind Ctrl+Alt+Esc to
+    // xkill) falls back to plain Esc while recording or transcribing.
+    let cancel_key = if shortcuts.unavailable().contains(&"Esc") {
+        "Esc".to_owned()
+    } else {
+        format!("{KEYS}+Esc")
+    };
     report(&format!(
-        "Dictly — {KEYS}+Space: hold to talk, or tap to start/stop; {KEYS}+Esc: cancel/clear; {KEYS}+V: insert retained text."
+        "Dictly — {KEYS}+Space: hold to talk, or tap to start/stop; {cancel_key}: cancel/clear; {KEYS}+V: insert retained text."
     ));
     report(&format!(
         "Audio is sent to {}. Cleanup: {}.",
         config.base_url, config.cleanup
     ));
-    // A cancel shortcut another app owns (Xfce and KDE bind Ctrl+Alt+Esc to
-    // xkill) falls back to plain Esc while recording or transcribing.
-    let esc_cancels = shortcuts.unavailable().contains(&"Esc");
     for &name in shortcuts.unavailable() {
         report(&format!(
             "{KEYS}+{name} is used by another app, so Dictly cannot use it. {}",
@@ -178,7 +185,6 @@ pub fn run_controlled(
             }
         ));
     }
-    let mut esc_was_down = false;
     report(
         "Ready. Focus an editable text field before starting. Do not change fields until insertion finishes.",
     );
@@ -197,14 +203,15 @@ pub fn run_controlled(
             *focus_changed |= Target::current() != Some(*target);
         }
         feedback.tick();
-        let esc_down = esc_cancels && platform::escape_down();
-        let mut esc_cancel = (esc_down && !esc_was_down && !matches!(state, State::Idle))
-            .then_some(Shortcut::Cancel);
-        esc_was_down = esc_down;
-        while let Some(shortcut) = esc_cancel.take().or_else(|| shortcuts.poll()) {
+        while let Some(shortcut) = shortcuts.poll() {
             if shortcut == Shortcut::Quit || stopped.load(Ordering::Acquire) {
                 return Ok(());
             }
+            let shortcut = match shortcut {
+                Shortcut::Escape if matches!(state, State::Idle) => continue,
+                Shortcut::Escape => Shortcut::Cancel,
+                shortcut => shortcut,
+            };
             match shortcut {
                 Shortcut::Cancel => {
                     recovery = None;
@@ -241,7 +248,7 @@ pub fn run_controlled(
                                         None,
                                     );
                                     report(&format!(
-                                        "Recording… ({}) Release the shortcut to finish, or after a quick tap press it again. {KEYS}+Esc discards.",
+                                        "Recording… ({}) Release the shortcut to finish, or after a quick tap press it again. {cancel_key} discards.",
                                         capture.device
                                     ));
                                     state = State::Recording {
@@ -316,7 +323,7 @@ pub fn run_controlled(
                     None,
                 );
                 report(&format!(
-                    "Hands-free recording. Press {KEYS}+Space to finish, {KEYS}+Esc to discard."
+                    "Hands-free recording. Press {KEYS}+Space to finish, {cancel_key} to discard."
                 ));
             }
             if capture.failed() {
@@ -382,7 +389,7 @@ pub fn run_controlled(
                                     Some(Duration::from_secs(4)),
                                 );
                                 report(&format!(
-                                    "{warning}{error:#}. Text retained in memory. Focus the intended field and press {KEYS}+V to retry, or {KEYS}+Esc to discard. If any text was inserted, remove it before retrying."
+                                    "{warning}{error:#}. Text retained in memory. Focus the intended field and press {KEYS}+V to retry, or {cancel_key} to discard. If any text was inserted, remove it before retrying."
                                 ));
                             }
                         }

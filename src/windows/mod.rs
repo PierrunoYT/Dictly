@@ -75,13 +75,13 @@ impl Drop for SingleInstance {
     }
 }
 
-/// Global shortcuts bound to this thread's message queue, and the names of
-/// those another app owns.
-pub struct Shortcuts(Vec<i32>, Vec<&'static str>);
+/// Global shortcuts bound to this thread's message queue, the names of those
+/// another app owns, and whether plain Esc was down at the last poll.
+pub struct Shortcuts(Vec<i32>, Vec<&'static str>, bool);
 
 impl Shortcuts {
     pub fn register() -> Result<Self> {
-        let mut keys = Self(vec![], vec![]);
+        let mut keys = Self(vec![], vec![], false);
         for (id, key) in [(TOGGLE, VK_SPACE), (CANCEL, VK_ESCAPE), (RECOVER, 0x56)] {
             // SAFETY: null HWND binds the hotkey to this thread's message queue.
             let registered = unsafe {
@@ -121,6 +121,13 @@ impl Shortcuts {
     /// The next shortcut press, dispatching other messages (such as overlay
     /// painting) on the way. `None` once the queue is empty.
     pub fn poll(&mut self) -> Option<Shortcut> {
+        // Another app owns Ctrl+Alt+Esc, so report plain Esc presses instead.
+        if self.1.contains(&"Esc") {
+            let was_down = std::mem::replace(&mut self.2, escape_down());
+            if self.2 && !was_down {
+                return Some(Shortcut::Escape);
+            }
+        }
         // SAFETY: MSG is plain data, for which all-zero bytes are valid.
         let mut message: MSG = unsafe { std::mem::zeroed() };
         // SAFETY: message is a valid writable MSG.
